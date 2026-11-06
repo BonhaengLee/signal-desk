@@ -1,0 +1,21 @@
+node_modules/
+.next/
+dist/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# RCAEval 등 외부 데이터는 라이선스 확인 전까지 커밋하지 않는다
+data/external/
+# 개인 기록·로컬 설정은 저장소에 넣지 않는다 (2차 방어선, 1차는 저장소 밖 보관)
+START.md
+*learning*log*
+notes/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+*.private.*
