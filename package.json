@@ -14,6 +14,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "3.14.26",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

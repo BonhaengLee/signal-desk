@@ -36,7 +36,8 @@ ul, ol { list-style: none; margin: 0; padding: 0; }
 .services tr.hot td { color: var(--error); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .events { overflow: auto; flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-.events li { display: grid; grid-template-columns: 64px 52px 110px 1fr; gap: 8px; padding: 3px 4px; border-bottom: 1px solid var(--line); }
+.events .row { display: grid; grid-template-columns: 64px 52px 110px 1fr; gap: 8px; align-items: center; padding: 0 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.events .msg { overflow: hidden; text-overflow: ellipsis; }
 .events .type { color: var(--muted); }
 .events .svc { color: #c3c8d6; }
 .sev-warn .type, .sev-warn .svc { color: var(--warn); }

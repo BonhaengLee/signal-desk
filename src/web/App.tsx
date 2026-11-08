@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { SignalEvent } from '../events/schema.ts';
 import { useSignalStream, type StreamStatus } from './useSignalStream.ts';
+import { EventList, describe, severity } from './EventList.tsx';
 
 const SCENARIOS = ['deploy-regression', 'db-degradation', 'retry-storm'] as const;
 const SPEEDS = [1, 5, 20] as const;
-const LIST_LIMIT = 300; // 가상화 전까지는 최근 것만 그린다
 
 const STATUS_LABEL: Record<StreamStatus, string> = {
   connecting: '연결 중',
@@ -14,25 +14,6 @@ const STATUS_LABEL: Record<StreamStatus, string> = {
 };
 
 const time = (d: Date) => d.toISOString().slice(11, 19);
-
-function describe(e: SignalEvent): string {
-  switch (e.type) {
-    case 'metric':
-      return `${e.payload.name} = ${e.payload.value}${e.payload.unit}`;
-    case 'log':
-      return e.payload.message;
-    case 'deploy':
-      return `배포 ${e.payload.version} (${e.payload.actor})`;
-    case 'alert':
-      return `${e.payload.rule} ${e.payload.state === 'firing' ? '발생' : '해소'}`;
-  }
-}
-
-function severity(e: SignalEvent): string {
-  if (e.type === 'log' || e.type === 'alert') return e.payload.level;
-  if (e.type === 'deploy') return 'deploy';
-  return 'info';
-}
 
 export function App() {
   const [scenario, setScenario] = useState<(typeof SCENARIOS)[number]>('deploy-regression');
@@ -56,7 +37,7 @@ export function App() {
 
   const visible = useMemo(() => {
     const list = hideMetrics ? events.filter((e) => e.type !== 'metric') : events;
-    return list.slice(-LIST_LIMIT).reverse();
+    return [...list].reverse(); // 최신이 위로
   }, [events, hideMetrics]);
 
   return (
@@ -121,16 +102,7 @@ export function App() {
               <input type="checkbox" checked={hideMetrics} onChange={(e) => setHideMetrics(e.target.checked)} /> 지표 숨기기
             </label>
           </div>
-          <ol className="events">
-            {visible.map((e) => (
-              <li key={e.id} className={`sev-${severity(e)}`}>
-                <span className="muted">{time(e.at)}</span>
-                <span className="type">{e.type}</span>
-                <span className="svc">{e.service}</span>
-                <span>{describe(e)}</span>
-              </li>
-            ))}
-          </ol>
+          <EventList events={visible} virtual />
         </section>
       </main>
     </div>
