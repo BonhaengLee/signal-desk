@@ -1,0 +1,21 @@
+{
+  "name": "deploy-regression",
+  "description": "payment-api 새 버전이 처리 용량을 떨어뜨린다. 10초 전 inventory-api 배포는 무관하다",
+  "startAt": "2026-01-01T00:00:00Z",
+  "durationSec": 180,
+  "tickSec": 5,
+  "entry": "checkout-api",
+  "loadRps": 80,
+  "alertP99Ms": 500,
+  "services": [
+    { "name": "checkout-api", "capacityRps": 200, "baseLatencyMs": 30, "dependsOn": ["payment-api", "inventory-api"], "timeoutMs": 400, "alertP99Ms": 700, "noiseLogRate": 0.1 },
+    { "name": "payment-api", "capacityRps": 120, "baseLatencyMs": 40, "dependsOn": ["payment-db"], "timeoutMs": 300, "noiseLogRate": 0.1 },
+    { "name": "inventory-api", "capacityRps": 300, "baseLatencyMs": 20, "noiseLogRate": 0.1 },
+    { "name": "payment-db", "capacityRps": 400, "baseLatencyMs": 8 }
+  ],
+  "faults": [
+    { "atSec": 50, "service": "inventory-api", "kind": "deploy", "version": "v2.8.0", "capacityFactor": 1 },
+    { "atSec": 60, "service": "payment-api", "kind": "deploy", "version": "v1.4.2", "capacityFactor": 0.72 }
+  ],
+  "rootCause": { "service": "payment-api", "kind": "deploy", "atSec": 60 }
+}

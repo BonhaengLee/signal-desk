@@ -1,0 +1,21 @@
+{
+  "name": "retry-storm",
+  "description": "payment-db 가 30초 동안 느려졌다 회복되지만, payment-api 의 3회 재시도가 부하를 키워 회복 뒤에도 장애가 이어진다. 100초의 핫픽스 배포는 효과가 없다",
+  "startAt": "2026-01-01T00:00:00Z",
+  "durationSec": 180,
+  "tickSec": 5,
+  "entry": "checkout-api",
+  "loadRps": 80,
+  "alertP99Ms": 500,
+  "services": [
+    { "name": "checkout-api", "capacityRps": 200, "baseLatencyMs": 30, "dependsOn": ["payment-api", "inventory-api"], "timeoutMs": 400, "alertP99Ms": 700, "noiseLogRate": 0.1 },
+    { "name": "payment-api", "capacityRps": 120, "baseLatencyMs": 40, "dependsOn": ["payment-db"], "timeoutMs": 60, "retries": 3, "noiseLogRate": 0.1 },
+    { "name": "inventory-api", "capacityRps": 300, "baseLatencyMs": 20, "noiseLogRate": 0.1 },
+    { "name": "payment-db", "capacityRps": 300, "baseLatencyMs": 8, "alertP99Ms": 200 }
+  ],
+  "faults": [
+    { "atSec": 60, "untilSec": 90, "service": "payment-db", "kind": "degrade", "capacityFactor": 0.29 },
+    { "atSec": 100, "service": "payment-api", "kind": "deploy", "version": "v1.4.3-hotfix", "capacityFactor": 1 }
+  ],
+  "rootCause": { "service": "payment-db", "kind": "degrade", "atSec": 60 }
+}
