@@ -21,6 +21,8 @@ export interface ServerOptions {
   tickMs?: number; // 새로 보낼 이벤트가 있는지 확인하는 간격
   heartbeatMs?: number;
   scenarioDir?: URL;
+  /** /events·/scenarios 밖의 요청을 먼저 받아 볼 처리기. 처리했으면 true */
+  extra?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>;
 }
 
 export interface StreamPosition {
@@ -72,8 +74,19 @@ export function createSseServer(options: ServerOptions = {}): http.Server {
     return p;
   };
 
-  return http.createServer((req, res) => {
+  return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
+
+    if (options.extra && url.pathname !== '/events' && url.pathname !== '/scenarios') {
+      try {
+        if (await options.extra(req, res)) return;
+      } catch (e) {
+        if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '서버 오류' }));
+        console.error(e);
+        return;
+      }
+    }
 
     if (url.pathname === '/scenarios') {
       res.writeHead(200, { 'Content-Type': 'application/json' });

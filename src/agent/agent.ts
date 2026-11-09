@@ -20,6 +20,11 @@ export interface Step {
   tool: string;
   args: Record<string, unknown>;
 }
+export interface InvestigateOptions {
+  maxSteps?: number; // 모델 호출 상한
+  onStep?: (step: Step, result: unknown) => void; // 도구를 실행할 때마다. 감사 로그·화면 스트리밍용
+}
+
 export interface InvestigateResult {
   verdict?: Verdict;
   steps: Step[];
@@ -32,7 +37,7 @@ const SYSTEM = `장애 조사 에이전트다. 도구로 증거를 모아 근본
 - 증상 이후의 배포는 원인이 될 수 없다
 - 확인이 끝나면 submit_root_cause 를 한 번 호출한다`;
 
-export async function investigate(ctx: ToolContext, chat: ChatFn, maxSteps = 10): Promise<InvestigateResult> {
+export async function investigate(ctx: ToolContext, chat: ChatFn, { maxSteps = 10, onStep }: InvestigateOptions = {}): Promise<InvestigateResult> {
   const known = new Set(ctx.topology.services.map((s) => s.name));
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM },
@@ -63,11 +68,13 @@ export async function investigate(ctx: ToolContext, chat: ChatFn, maxSteps = 10)
       steps.push({ tool: call.function.name, args });
       if (call.function.name === 'submit_root_cause') {
         const v = parseVerdict(args, known);
+        onStep?.(steps.at(-1)!, v.ok ? { ok: true } : { error: v.error });
         if (v.ok) return { verdict: v.verdict, steps, stopReason: 'submitted' };
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: v.error }) });
         continue;
       }
       const result = runTool(ctx, call.function.name, args);
+      onStep?.(steps.at(-1)!, result);
       messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
     }
   }

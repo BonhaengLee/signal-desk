@@ -69,7 +69,7 @@ test('도구를 안 부르면 한 번 재촉하고, 또 안 부르면 끝낸다'
 
 test('호출 수 상한에서 멈춘다', async () => {
   const { chat } = scripted(Array.from({ length: 20 }, () => [['get_topology', {}]] as [string, Record<string, unknown>][]));
-  const r = await investigate(contextFor(load('retry-storm'), 1), chat, 4);
+  const r = await investigate(contextFor(load('retry-storm'), 1), chat, { maxSteps: 4 });
   assert.deepEqual([r.stopReason, r.steps.length], ['max_steps', 4]);
 });
 

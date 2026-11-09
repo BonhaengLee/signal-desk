@@ -19,3 +19,5 @@ notes/
 CLAUDE.md
 CLAUDE.local.md
 *.private.*
+# 감사 로그 DB (로컬 실행 산출물)
+var/
