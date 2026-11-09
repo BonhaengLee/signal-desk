@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "signal-desk": {
+      "command": "node",
+      "args": ["src/mcp/server.ts"]
+    }
+  }
+}
