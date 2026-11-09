@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { simulate, type Scenario } from '../simulator/simulate.ts';
 import type { SignalEvent } from '../events/schema.ts';
 
-export const SCENARIOS = ['deploy-regression', 'db-degradation', 'retry-storm'] as const;
+export const SCENARIOS = ['deploy-regression', 'db-degradation', 'retry-storm', 'silent-db', 'hidden-deploy'] as const;
 export const ANCHOR_MS = Date.parse('2026-01-01T00:00:00Z');
 export const HEARTBEAT_MS = 15_000; // 프록시가 조용한 연결을 끊지 않도록 (Cloudflare 는 약 100초)
 export const RETRY_MS = 2_000; // 끊겼을 때 브라우저가 다시 붙기까지 기다릴 시간

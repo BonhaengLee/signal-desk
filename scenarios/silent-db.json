@@ -1,0 +1,66 @@
+{
+  "name": "silent-db",
+  "description": "payment-db 성능 저하. DB 에는 지연 경보가 없어서 위쪽 payment-api 경보가 먼저 울린다. 직전 checkout-api 배포는 함정",
+  "startAt": "2026-01-01T00:00:00Z",
+  "durationSec": 180,
+  "tickSec": 5,
+  "entry": "checkout-api",
+  "loadRps": 80,
+  "alertP99Ms": 500,
+  "services": [
+    {
+      "name": "checkout-api",
+      "capacityRps": 200,
+      "baseLatencyMs": 30,
+      "dependsOn": [
+        "payment-api",
+        "inventory-api"
+      ],
+      "timeoutMs": 400,
+      "alertP99Ms": 700,
+      "noiseLogRate": 0.1
+    },
+    {
+      "name": "payment-api",
+      "capacityRps": 120,
+      "baseLatencyMs": 40,
+      "dependsOn": [
+        "payment-db"
+      ],
+      "timeoutMs": 300,
+      "noiseLogRate": 0.1
+    },
+    {
+      "name": "inventory-api",
+      "capacityRps": 300,
+      "baseLatencyMs": 20,
+      "noiseLogRate": 0.1
+    },
+    {
+      "name": "payment-db",
+      "capacityRps": 400,
+      "baseLatencyMs": 8,
+      "alertP99Ms": 100000
+    }
+  ],
+  "faults": [
+    {
+      "atSec": 65,
+      "service": "checkout-api",
+      "kind": "deploy",
+      "version": "v3.1.0",
+      "capacityFactor": 1
+    },
+    {
+      "atSec": 70,
+      "service": "payment-db",
+      "kind": "degrade",
+      "capacityFactor": 0.21
+    }
+  ],
+  "rootCause": {
+    "service": "payment-db",
+    "kind": "degrade",
+    "atSec": 70
+  }
+}
