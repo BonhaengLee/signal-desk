@@ -9,9 +9,11 @@
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "simulate": "node src/simulator/cli.ts",
-    "dev:server": "node --watch src/server/main.ts",
+    "dev:server": "node --watch --env-file-if-exists=.env.local src/server/main.ts",
     "dev:web": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "eval": "node --env-file=.env.local src/agent/eval.ts",
+    "mcp": "node src/mcp/server.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
