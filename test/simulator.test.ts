@@ -88,3 +88,15 @@ test('의존성에 순환이 있으면 시뮬레이션을 시작하지 않는다
     /의존성 순환: a/,
   );
 });
+
+test('경보가 울리는 중에 기준의 2배를 넘으면 error 로 한 번만 올린다', () => {
+  const sc = load('retry-storm');
+  const alerts = run(sc).flatMap((e) => (e.type === 'alert' && e.service === 'payment-db' ? [e] : []));
+  assert.deepEqual(
+    alerts.map((e) => [sec(sc, e), e.payload.state, e.payload.level]),
+    [
+      [60, 'firing', 'warn'],
+      [65, 'firing', 'error'],
+    ],
+  );
+});

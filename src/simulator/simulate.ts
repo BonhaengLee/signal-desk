@@ -87,7 +87,7 @@ export function* simulate(scenario: Scenario, seed: number): Generator<SignalEve
   const depsFirst = dependencyOrder(scenario.services);
   const callersFirst = [...depsFirst].reverse();
   const capacityFactor = new Map(scenario.services.map((s) => [s.name, 1]));
-  const firing = new Set<string>();
+  const firing = new Map<string, 'warn' | 'error'>(); // 지금 울리는 경보와 그 등급
   // 직전 틱에 호출자→대상 호출 중 타임아웃 난 비율. 재시도가 다음 틱 부하를 키운다 (지연된 되먹임)
   let timeoutRate = new Map<string, number>();
   let seq = 0;
@@ -155,13 +155,18 @@ export function* simulate(scenario: Scenario, seed: number): Generator<SignalEve
 
       const threshold = s.alertP99Ms ?? scenario.alertP99Ms;
       const rule = `latency_p99 > ${threshold}ms`;
-      if (p99 > threshold && !firing.has(s.name)) {
-        firing.add(s.name);
-        const level = p99 > threshold * 2 ? 'error' : 'warn';
+      const level = p99 > threshold * 2 ? 'error' : 'warn';
+      const current = firing.get(s.name);
+      if (p99 > threshold && current === undefined) {
+        firing.set(s.name, level);
         yield make({ type: 'alert', service: s.name, payload: { level, rule, state: 'firing' } }, t);
-      } else if (p99 <= threshold && firing.has(s.name)) {
+      } else if (p99 > threshold && current === 'warn' && level === 'error') {
+        // 울리는 중에 기준의 2배를 넘으면 등급을 올린다. 내려가는 쪽은 해소될 때까지 유지한다
+        firing.set(s.name, 'error');
+        yield make({ type: 'alert', service: s.name, payload: { level: 'error', rule, state: 'firing' } }, t);
+      } else if (p99 <= threshold && current !== undefined) {
         firing.delete(s.name);
-        yield make({ type: 'alert', service: s.name, payload: { level: 'warn', rule, state: 'resolved' } }, t);
+        yield make({ type: 'alert', service: s.name, payload: { level: current, rule, state: 'resolved' } }, t);
       }
 
       for (const d of s.dependsOn ?? []) {

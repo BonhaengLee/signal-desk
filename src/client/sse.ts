@@ -24,11 +24,12 @@ export function splitMessages(buffer: string): { blocks: string[]; rest: string 
   return { blocks: parts, rest };
 }
 
-/** 스트림을 읽어 메시지가 완성될 때마다 onMessage 를 부른다 */
+/** 스트림을 읽어 메시지가 완성될 때마다 onMessage 를 부른다. onActivity 는 하트비트 주석을 포함해 바이트가 올 때마다 불린다 */
 export async function connect(
   url: string,
   onMessage: (msg: SseMessage) => void,
   init: RequestInit = {},
+  onActivity?: () => void,
 ): Promise<void> {
   const res = await fetch(url, init);
   if (!res.ok || !res.body) throw new Error(`SSE 연결 실패: HTTP ${res.status}`);
@@ -39,6 +40,7 @@ export async function connect(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+    onActivity?.();
     buffer += decoder.decode(value, { stream: true }); // 조각 경계에서 잘린 한글 바이트를 다음 조각과 합친다
     const { blocks, rest } = splitMessages(buffer);
     buffer = rest;

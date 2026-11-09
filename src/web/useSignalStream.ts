@@ -1,8 +1,8 @@
 // SSE 이벤트를 받아 React 상태에 쌓는 훅.
-// 재연결·중복 제거는 아직 없다(다음 단계). 지금은 연결 한 번의 수명만 다룬다.
+// 끊기면 subscribe 가 Last-Event-ID 로 다시 붙고 중복을 거른다. 재연결 대기 중은 'connecting' 으로 보여 준다.
 
 import { useEffect, useState } from 'react';
-import { connect } from '../client/sse.ts';
+import { subscribe } from '../client/subscribe.ts';
 import { parseEvent, type SignalEvent } from '../events/schema.ts';
 
 export type StreamStatus = 'connecting' | 'open' | 'closed' | 'error';
@@ -18,10 +18,14 @@ export function useSignalStream(url: string) {
     setRejected(0);
     setStatus('connecting');
 
-    connect(
-      url,
-      (msg) => {
-        setStatus('open');
+    subscribe(url, {
+      signal: ac.signal,
+      onStatus: (s) => {
+        if (s === 'open') setStatus('open');
+        else if (s === 'connecting' || s === 'reconnecting') setStatus('connecting');
+        else if (!ac.signal.aborted) setStatus('closed');
+      },
+      onMessage: (msg) => {
         if (msg.event === 'reset') {
           setEvents([]); // 시나리오가 처음부터 다시 시작
           return;
@@ -38,12 +42,9 @@ export function useSignalStream(url: string) {
         if (result.ok) setEvents((prev) => [...prev, result.event]);
         else setRejected((n) => n + 1);
       },
-      { signal: ac.signal },
-    )
-      .then(() => setStatus('closed'))
-      .catch(() => {
-        if (!ac.signal.aborted) setStatus('error');
-      });
+    }).catch(() => {
+      if (!ac.signal.aborted) setStatus('error');
+    });
 
     // URL 이 바뀌거나 화면이 사라지면 이전 연결을 끊는다. 끊은 뒤 남은 메시지는 connect 가 넘기지 않는다
     return () => ac.abort();
