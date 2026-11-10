@@ -14,6 +14,8 @@ import type { ToolContext, Topology } from '../agent/tools.ts';
 export const RCA_METRICS = ['latency', 'error', 'cpu', 'mem', 'load'];
 // RCAEval RE1 에는 배포·로그가 없다. 지표 도구는 서비스 단위 한 장만 준다
 export const RCA_TOOLS = ['get_topology', 'list_alerts', 'get_service_metrics', 'submit_root_cause'];
+// 결합 방식: 통계 순위로 후보를 받고 에이전트가 검증한다
+export const RCA_HYBRID_TOOLS = ['get_topology', 'list_alerts', 'rank_anomalies', 'get_service_metrics', 'submit_root_cause'];
 export const MAX_BEFORE_SEC = 900;
 export const AFTER_SEC = 300;
 const STEP_SEC = 10;

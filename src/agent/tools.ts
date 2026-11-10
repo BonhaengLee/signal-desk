@@ -39,6 +39,7 @@ export function toolSpecsFor(ctx: Pick<ToolContext, 'metrics' | 'bucketSec' | 't
     service: { type: 'string' },
     name: { type: 'string', enum: ctx.metrics ?? SIM_METRICS },
   }, ['service', 'name']),
+  fn('rank_anomalies', '최근 5분 지표를 그 앞(1분 간격 두고)의 평소 값과 비교해 크게 변한 순서로 상위 8개. 순위가 높다고 원인은 아니다. 경보·호출 관계·다른 지표로 검증할 것', {}),
   fn('get_service_metrics', `한 서비스의 지표 전부(${(ctx.metrics ?? SIM_METRICS).join('·')})를 ${ctx.bucketSec ?? 10}초 간격 구간 최댓값으로 한 번에 요약. 서비스별 대시보드 한 장`, {
     service: { type: 'string' },
   }, ['service']),
@@ -64,6 +65,37 @@ const tsec = (ctx: ToolContext, e: SignalEvent) => Math.round((e.at.getTime() - 
 
 // 10 이상은 소수 첫째 자리, 그 아래는 유효숫자 3자리 (초 단위 지연 0.012 같은 값이 0 으로 뭉개지지 않게)
 const round = (v: number) => (Math.abs(v) >= 10 ? Math.round(v * 10) / 10 : Number(v.toPrecision(3)));
+
+export const RECENT_SEC = 300; // 운영자가 경보를 받고 대시보드를 연 시점의 "최근" 구간
+const GAP_SEC = 60; // 최근 직전 1분은 평소에서 뺀다 (변화가 막 시작됐을 수 있다)
+const MIN_REL_SPREAD = 0.05; // 평소 흔들림의 하한 = 평소 값의 5%. 거의 안 움직이던 지표의 미세 변화가 1위가 되는 것을 막는다
+
+/** 서비스·지표마다 최근 평균이 평소 평균에서 몇 배의 흔들림만큼 벗어났는지(z) 큰 순서로 */
+export function rankAnomalies(ctx: ToolContext): { service: string; metric: string; before: number; recent: number; z: number }[] {
+  const series = new Map<string, { t: number; v: number }[]>();
+  let end = -Infinity;
+  for (const e of ctx.events) {
+    if (e.type !== 'metric') continue;
+    const k = `${e.service}\u0000${e.payload.name}`;
+    const t = tsec(ctx, e);
+    end = Math.max(end, t);
+    (series.get(k) ?? series.set(k, []).get(k)!).push({ t, v: e.payload.value });
+  }
+  const recentFrom = end - RECENT_SEC;
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const out = [];
+  for (const [k, pts] of series) {
+    const base = pts.filter((p) => p.t < recentFrom - GAP_SEC).map((p) => p.v);
+    const recent = pts.filter((p) => p.t > recentFrom).map((p) => p.v);
+    if (base.length < 5 || recent.length === 0) continue;
+    const m = avg(base);
+    const sd = Math.sqrt(avg(base.map((x) => (x - m) ** 2)));
+    const spread = Math.max(sd, Math.abs(m) * MIN_REL_SPREAD, 1e-9);
+    const [service, metric] = k.split('\u0000') as [string, string];
+    out.push({ service, metric, before: m, recent: avg(recent), z: Math.abs(avg(recent) - m) / spread });
+  }
+  return out.sort((a, b) => b.z - a.z);
+}
 
 /** 한 서비스·지표를 bucketSec 구간 최댓값으로 묶는다. 키 = 구간 시작 T+초 */
 function bucketMax(ctx: ToolContext, service: string, metric: string): Map<number, number> {
@@ -97,6 +129,8 @@ export function runTool(ctx: ToolContext, name: string, args: Record<string, unk
       if (!known.has(svc)) return { error: `모르는 서비스: ${svc}` };
       return [...bucketMax(ctx, svc, String(args.name))].map(([t, max]) => ({ t, max: round(max) }));
     }
+    case 'rank_anomalies':
+      return rankAnomalies(ctx).slice(0, 8).map((r) => ({ ...r, before: round(r.before), recent: round(r.recent), z: round(r.z) }));
     case 'get_service_metrics': {
       if (!known.has(svc)) return { error: `모르는 서비스: ${svc}` };
       // 시각 열 하나 + 지표마다 값 열 하나. 객체 배열보다 토큰이 훨씬 적다
