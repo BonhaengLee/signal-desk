@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AuditEvent } from '../audit/store.ts';
 import { subscribe } from '../client/subscribe.ts';
+import { DEMO, DemoError, demoDecide, demoStart, demoSubscribe } from './demo.ts';
 import { parseAuditEvent, summarizeInvestigation, type InvestigationView } from './investigation.ts';
 
 export type InvestigationStreamStatus = 'connecting' | 'open' | 'error';
@@ -17,7 +18,7 @@ export function useInvestigation(id: string | undefined): { view?: Investigation
     setStatus('connecting');
     if (!id) return;
     const ac = new AbortController();
-    subscribe(`/investigations/${id}/stream`, {
+    (DEMO ? demoSubscribe : subscribe)(`/investigations/${id}/stream`, {
       signal: ac.signal,
       onStatus: (s) => setStatus(s === 'open' ? 'open' : s === 'reconnecting' ? 'error' : 'connecting'),
       onMessage: (msg) => {
@@ -48,11 +49,22 @@ async function post(url: string, body: unknown): Promise<unknown> {
   return data;
 }
 
+/** 데모 오류를 서버 오류와 같은 모양으로 */
+async function demoCall<T>(f: () => T | Promise<T>): Promise<T> {
+  try {
+    return await f();
+  } catch (e) {
+    throw e instanceof DemoError ? new ApiError(e.status, e.message) : e;
+  }
+}
+
 export async function startInvestigation(scenario: string, seed: number): Promise<string> {
+  if (DEMO) return demoCall(() => demoStart(scenario));
   const r = (await post('/investigations', { scenario, seed })) as { id: string };
   return r.id;
 }
 
 export async function decideProposal(proposalId: string, operator: string, decision: 'approved' | 'rejected', reason?: string): Promise<void> {
+  if (DEMO) return demoCall(() => demoDecide(proposalId, operator, decision, reason));
   await post(`/proposals/${proposalId}/decision`, { operator, decision, ...(reason ? { reason } : {}) });
 }

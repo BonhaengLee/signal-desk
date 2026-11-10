@@ -21,3 +21,5 @@ CLAUDE.local.md
 *.private.*
 # 감사 로그 DB (로컬 실행 산출물)
 var/
+# 정적 데모 데이터 (scripts/build-demo.ts 가 만든다)
+src/web/public/demo/

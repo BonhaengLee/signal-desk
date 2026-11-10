@@ -4,6 +4,7 @@ import { useSignalStream, type StreamStatus } from './useSignalStream.ts';
 import { EventList, describe } from './EventList.tsx';
 import { Timeline } from './Timeline.tsx';
 import { InvestigationPanel } from './Investigation.tsx';
+import { DEMO } from './demo.ts';
 import {
   SEVERITIES,
   buildTimeline,
@@ -44,7 +45,7 @@ type Speed = (typeof SPEEDS)[number]['id'];
 
 const STATUS: Record<StreamStatus, { label: string; tone: Tone; pulse: boolean; help: string }> = {
   connecting: { label: '연결 중', tone: 'neutral', pulse: true, help: 'SSE 서버에 연결하고 있습니다' },
-  open: { label: '실시간', tone: 'ok', pulse: true, help: 'SSE 로 이벤트를 받는 중입니다' },
+  open: { label: DEMO ? '재생 중' : '실시간', tone: 'ok', pulse: true, help: DEMO ? '미리 만든 이벤트를 배속에 맞춰 재생하는 중입니다' : 'SSE 로 이벤트를 받는 중입니다' },
   closed: { label: '연결 종료', tone: 'neutral', pulse: false, help: '서버가 스트림을 닫았습니다' },
   error: { label: '연결 실패', tone: 'error', pulse: false, help: 'SSE 서버에 연결하지 못했습니다' },
 };
@@ -136,6 +137,11 @@ export function App() {
         <div className="brand">
           <Logo />
           <h1>Signal Desk</h1>
+          {DEMO && (
+            <span title="서버 없이 미리 만든 이벤트와 조사 녹화를 재생합니다">
+              <Badge tone="info">녹화 재생 데모</Badge>
+            </span>
+          )}
         </div>
         <div className="topbar-controls">
           <Select label="시나리오" value={scenarioName} options={SCENARIO_OPTIONS} onChange={setScenarioName} />

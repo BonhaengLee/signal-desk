@@ -1,0 +1,455 @@
+{
+  "id": "53a059f9-32b8-4e06-b324-5571525d663d",
+  "scenario": "deploy-regression",
+  "seed": 42,
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-11-10T12:32:43.377Z",
+      "actor": "system",
+      "kind": "investigation_started",
+      "payload": {
+        "scenario": "deploy-regression",
+        "seed": 42,
+        "model": "nemotron-3.5-lightning-30b-a3b"
+      }
+    },
+    {
+      "seq": 2,
+      "at": "2026-11-10T12:32:44.989Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "get_topology",
+        "args": {},
+        "result": {
+          "entry": "checkout-api",
+          "services": [
+            {
+              "name": "checkout-api",
+              "dependsOn": [
+                "payment-api",
+                "inventory-api"
+              ]
+            },
+            {
+              "name": "payment-api",
+              "dependsOn": [
+                "payment-db"
+              ]
+            },
+            {
+              "name": "inventory-api",
+              "dependsOn": []
+            },
+            {
+              "name": "payment-db",
+              "dependsOn": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seq": 3,
+      "at": "2026-11-10T12:32:46.438Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "list_alerts",
+        "args": {},
+        "result": [
+          {
+            "t": 60,
+            "service": "payment-api",
+            "level": "error",
+            "rule": "latency_p99 > 500ms",
+            "state": "firing"
+          },
+          {
+            "t": 60,
+            "service": "checkout-api",
+            "level": "warn",
+            "rule": "latency_p99 > 700ms",
+            "state": "firing"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 4,
+      "at": "2026-11-10T12:32:49.901Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "get_metric",
+        "args": {
+          "name": "latency_p99",
+          "service": "payment-api"
+        },
+        "result": [
+          {
+            "t": 0,
+            "max": 256
+          },
+          {
+            "t": 10,
+            "max": 252
+          },
+          {
+            "t": 20,
+            "max": 259
+          },
+          {
+            "t": 30,
+            "max": 267
+          },
+          {
+            "t": 40,
+            "max": 261
+          },
+          {
+            "t": 50,
+            "max": 254
+          },
+          {
+            "t": 60,
+            "max": 1308
+          },
+          {
+            "t": 70,
+            "max": 2672
+          },
+          {
+            "t": 80,
+            "max": 870
+          },
+          {
+            "t": 90,
+            "max": 1073
+          },
+          {
+            "t": 100,
+            "max": 2775
+          },
+          {
+            "t": 110,
+            "max": 2457
+          },
+          {
+            "t": 120,
+            "max": 1380
+          },
+          {
+            "t": 130,
+            "max": 693
+          },
+          {
+            "t": 140,
+            "max": 1654
+          },
+          {
+            "t": 150,
+            "max": 2469
+          },
+          {
+            "t": 160,
+            "max": 1370
+          },
+          {
+            "t": 170,
+            "max": 1534
+          }
+        ]
+      }
+    },
+    {
+      "seq": 5,
+      "at": "2026-11-10T12:32:51.692Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "get_metric",
+        "args": {
+          "service": "checkout-api",
+          "name": "latency_p99"
+        },
+        "result": [
+          {
+            "t": 0,
+            "max": 405
+          },
+          {
+            "t": 10,
+            "max": 402
+          },
+          {
+            "t": 20,
+            "max": 423
+          },
+          {
+            "t": 30,
+            "max": 401
+          },
+          {
+            "t": 40,
+            "max": 420
+          },
+          {
+            "t": 50,
+            "max": 409
+          },
+          {
+            "t": 60,
+            "max": 905
+          },
+          {
+            "t": 70,
+            "max": 929
+          },
+          {
+            "t": 80,
+            "max": 889
+          },
+          {
+            "t": 90,
+            "max": 896
+          },
+          {
+            "t": 100,
+            "max": 947
+          },
+          {
+            "t": 110,
+            "max": 920
+          },
+          {
+            "t": 120,
+            "max": 905
+          },
+          {
+            "t": 130,
+            "max": 844
+          },
+          {
+            "t": 140,
+            "max": 926
+          },
+          {
+            "t": 150,
+            "max": 893
+          },
+          {
+            "t": 160,
+            "max": 920
+          },
+          {
+            "t": 170,
+            "max": 946
+          }
+        ]
+      }
+    },
+    {
+      "seq": 6,
+      "at": "2026-11-10T12:32:55.708Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "list_deploys",
+        "args": {},
+        "result": [
+          {
+            "t": 50,
+            "service": "inventory-api",
+            "version": "v2.8.0"
+          },
+          {
+            "t": 60,
+            "service": "payment-api",
+            "version": "v1.4.2"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 7,
+      "at": "2026-11-10T12:32:58.643Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "get_logs",
+        "args": {
+          "service": "payment-api"
+        },
+        "result": [
+          {
+            "message": "request queue growing (utilization N%)",
+            "level": "warn",
+            "first": 75,
+            "count": 8
+          }
+        ]
+      }
+    },
+    {
+      "seq": 8,
+      "at": "2026-11-10T12:33:09.241Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "submit_root_cause",
+        "args": {
+          "ruledOut": [
+            {
+              "service": "inventory-api",
+              "why": "inventory-api 배포는 T+50에 있었으나 별도 경보가 없으며 checkout-api 의존 대상아니라 지연 전파 불가"
+            },
+            {
+              "service": "checkout-api",
+              "why": "checkout-api는 증상(지연) 자체이며 원인이 아님"
+            },
+            {
+              "service": "payment-db",
+              "why": "payment-db 지표는 배포 전후 변동이 없으며 지연의 직접 원인이 되지 않음"
+            }
+          ],
+          "summary": "payment-api 배포( v1.4.2, T+60) 직후 latency_p99가 250ms대에서 1308ms로 급증했으며, checkout-api가 payment-api에 의존하고 있어 지연이 전파된 것",
+          "service": "payment-api",
+          "kind": "deploy",
+          "evidence": [
+            {
+              "step": 1,
+              "fact": "checkout-api는 payment-api와 inventory-api를 의존함"
+            },
+            {
+              "step": 2,
+              "fact": "payment-api와 checkout-api에 대해 latency_p99 경보가 T+60에 발령됨"
+            },
+            {
+              "step": 3,
+              "fact": "payment-api latency_p99는 T+0~50초대 250~260ms 수준이었다가 T+60에 1308ms로 급증"
+            },
+            {
+              "step": 5,
+              "fact": "payment-api에 대한 배포가 T+60에 있었으며, deploy 시점과 경보 발령 시점이 일치함"
+            },
+            {
+              "step": 6,
+              "fact": "payment-api 로그에 요청 큐가 늘어나고 있는 경고가 T+75에 기록돼 배포 후 부하가 증가했음을 시사"
+            }
+          ]
+        },
+        "result": {
+          "error": "evidence 는 1~4개 배열"
+        }
+      }
+    },
+    {
+      "seq": 9,
+      "at": "2026-11-10T12:33:15.232Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "submit_root_cause",
+        "args": {
+          "summary": "payment-api 배포( v1.4.2, T+60) 직후 latency_p99가 250ms대에서 1308ms로 급증했으며, checkout-api가 payment-api에 의존하고 있어 지연이 전파된 것",
+          "kind": "deploy",
+          "service": "payment-api",
+          "ruledOut": [
+            {
+              "service": "inventory-api",
+              "why": "inventory-api 배포는 T+50에 있었으나 별도 경보가 없으며 checkout-api 의존 대상아니라 지연 전파 불가"
+            },
+            {
+              "service": "checkout-api",
+              "why": "checkout-api는 증상(지연) 자체이며 원인이 아님"
+            },
+            {
+              "service": "payment-db",
+              "why": "payment-db 지표는 배포 전후 변동이 없으며 지연의 직접 원인이 되지 않음"
+            }
+          ],
+          "evidence": [
+            {
+              "step": 1,
+              "fact": "checkout-api는 payment-api와 inventory-api를 의존함"
+            },
+            {
+              "step": 2,
+              "fact": "payment-api와 checkout-api에 대해 latency_p99 경보가 T+60에 발령됨"
+            },
+            {
+              "step": 3,
+              "fact": "payment-api latency_p99는 T+0~50초대 250~260ms 수준이었다가 T+60에 1308ms로 급증"
+            },
+            {
+              "step": 5,
+              "fact": "payment-api에 대한 배포가 T+60에 있었으며, deploy 시점과 경보 발령 시점이 일치함"
+            }
+          ]
+        },
+        "result": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "seq": 10,
+      "at": "2026-11-10T12:33:15.232Z",
+      "actor": "agent",
+      "kind": "verdict",
+      "payload": {
+        "service": "payment-api",
+        "kind": "deploy",
+        "summary": "payment-api 배포( v1.4.2, T+60) 직후 latency_p99가 250ms대에서 1308ms로 급증했으며, checkout-api가 payment-api에 의존하고 있어 지연이 전파된 것",
+        "evidence": [
+          {
+            "step": 1,
+            "fact": "checkout-api는 payment-api와 inventory-api를 의존함"
+          },
+          {
+            "step": 2,
+            "fact": "payment-api와 checkout-api에 대해 latency_p99 경보가 T+60에 발령됨"
+          },
+          {
+            "step": 3,
+            "fact": "payment-api latency_p99는 T+0~50초대 250~260ms 수준이었다가 T+60에 1308ms로 급증"
+          },
+          {
+            "step": 5,
+            "fact": "payment-api에 대한 배포가 T+60에 있었으며, deploy 시점과 경보 발령 시점이 일치함"
+          }
+        ],
+        "ruledOut": [
+          {
+            "service": "inventory-api",
+            "why": "inventory-api 배포는 T+50에 있었으나 별도 경보가 없으며 checkout-api 의존 대상아니라 지연 전파 불가"
+          },
+          {
+            "service": "checkout-api",
+            "why": "checkout-api는 증상(지연) 자체이며 원인이 아님"
+          },
+          {
+            "service": "payment-db",
+            "why": "payment-db 지표는 배포 전후 변동이 없으며 지연의 직접 원인이 되지 않음"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 11,
+      "at": "2026-11-10T12:33:15.233Z",
+      "actor": "agent",
+      "kind": "proposal",
+      "payload": {
+        "proposalId": "82b3b61d-c90f-4cf0-a6fd-2f972810852f",
+        "action": {
+          "type": "rollback",
+          "service": "payment-api",
+          "version": "v1.4.2"
+        }
+      }
+    }
+  ]
+}

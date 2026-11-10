@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { subscribe } from '../client/subscribe.ts';
+import { DEMO, demoSubscribe } from './demo.ts';
 import { parseEvent, type SignalEvent } from '../events/schema.ts';
 
 export type StreamStatus = 'connecting' | 'open' | 'closed' | 'error';
@@ -18,7 +19,7 @@ export function useSignalStream(url: string) {
     setRejected(0);
     setStatus('connecting');
 
-    subscribe(url, {
+    (DEMO ? demoSubscribe : subscribe)(url, {
       signal: ac.signal,
       onStatus: (s) => {
         if (s === 'open') setStatus('open');

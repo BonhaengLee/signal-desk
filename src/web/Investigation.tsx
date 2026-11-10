@@ -6,6 +6,7 @@ import type { Action } from '../audit/store.ts';
 import type { Verdict } from '../agent/tools.ts';
 import { formatCall, formatResult, previewResult, type InvestigationView } from './investigation.ts';
 import { ApiError, decideProposal, startInvestigation, useInvestigation } from './useInvestigation.ts';
+import { DEMO } from './demo.ts';
 import { Badge, Card, EmptyState, VisuallyHidden, type Tone } from './ui/controls.tsx';
 import s from './Investigation.module.css';
 
@@ -57,7 +58,11 @@ export function InvestigationPanel({ scenario }: { scenario: string }) {
     try {
       setId(await startInvestigation(scenario, SEED));
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 404 ? '조사 API 가 꺼져 있습니다. .env.local 에 LLM 키를 넣고 서버를 다시 켜세요' : `조사를 시작하지 못했습니다: ${(e as Error).message}`);
+      setError(
+        e instanceof ApiError && e.status === 404 && !DEMO
+          ? '조사 API 가 꺼져 있습니다. .env.local 에 LLM 키를 넣고 서버를 다시 켜세요'
+          : `조사를 시작하지 못했습니다: ${(e as Error).message}`,
+      );
     } finally {
       setStarting(false);
     }
@@ -88,7 +93,10 @@ export function InvestigationPanel({ scenario }: { scenario: string }) {
         </p>
       )}
       {!id ? (
-        <EmptyState title="아직 조사하지 않았습니다">에이전트가 경보·지표·로그·배포를 차례로 보고 원인과 조치를 제안합니다. 조치는 사람이 승인해야 실행됩니다</EmptyState>
+        <EmptyState title="아직 조사하지 않았습니다">
+          에이전트가 경보·지표·로그·배포를 차례로 보고 원인과 조치를 제안합니다. 조치는 사람이 승인해야 실행됩니다. 조사는 화면 재생 위치와 상관없이 이 시나리오의 전체 기록을 봅니다
+          {DEMO && '. 데모는 실제 모델로 미리 돌린 조사를 재생하고, 승인·거절은 이 브라우저에만 반영됩니다'}
+        </EmptyState>
       ) : !view ? (
         <EmptyState title={status === 'error' ? '조사 기록에 다시 연결하는 중' : '조사 기록을 불러오는 중'} />
       ) : (

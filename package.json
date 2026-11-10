@@ -14,7 +14,8 @@
     "build": "vite build",
     "eval": "node --env-file=.env.local src/agent/eval.ts",
     "mcp": "node src/mcp/server.ts",
-    "eval:rca": "node --env-file=.env.local src/rcaeval/eval.ts"
+    "eval:rca": "node --env-file=.env.local src/rcaeval/eval.ts",
+    "build:demo": "node scripts/build-demo.ts && VITE_DEMO=1 vite build --base /signal-desk/"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
