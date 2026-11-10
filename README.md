@@ -123,6 +123,7 @@
 - [ADR-0000 기술 선택 절차](docs/adr/0000-스택-결정-절차.md)
 - [ADR-0001 화면 프레임워크](docs/adr/0001-화면-프레임워크.md) — Vite + React. Next.js 를 버린 이유
 - [ADR-0002 목록 가상화](docs/adr/0002-목록-가상화.md) — 실측 비교와 남은 문제
+- [ADR-0003 접근성 컴포넌트와 스타일](docs/adr/0003-UI-컴포넌트와-스타일.md) — Radix + CSS Modules. React Aria·Base UI 와 비교
 - [ADR-0004 MCP 서버](docs/adr/0004-MCP-서버.md) — 공식 SDK, 저수준 `Server` 를 쓴 이유
 - [ADR-0005 감사 로그 저장소](docs/adr/0005-감사-로그-저장소.md) — SQLite, 동시 승인 처리, PostgreSQL 이 이기는 조건
 

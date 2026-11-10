@@ -1,0 +1,86 @@
+/* 디자인 토큰. 색·간격·글자·모서리·그림자는 여기서만 정한다. 컴포넌트 CSS 는 값을 직접 쓰지 않고 이 변수를 읽는다 */
+:root {
+  /* 바탕과 선 */
+  --color-bg: #f7f7f8;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f3f4f6;
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+
+  /* 글자 */
+  --color-text: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #6b7280; /* 흰 바탕 대비 4.8:1, 작은 글자 AA 통과 */
+
+  /* 강조와 포커스 */
+  --color-accent: #2563eb;
+  --color-accent-soft: #eff6ff;
+  --color-focus: #2563eb;
+
+  /* 심각도. 색은 심각도에만 쓴다. 각 색은 글자용(-fg)과 바탕용(-bg)을 짝으로 둔다 */
+  --color-error-fg: #b91c1c;
+  --color-error: #dc2626;
+  --color-error-bg: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-warn-fg: #a16207;
+  --color-warn: #d97706;
+  --color-warn-bg: #fffbeb;
+  --color-warn-border: #fde68a;
+  --color-ok-fg: #15803d;
+  --color-ok: #16a34a;
+  --color-ok-bg: #f0fdf4;
+  --color-ok-border: #bbf7d0;
+  --color-deploy-fg: #1d4ed8;
+  --color-deploy: #2563eb;
+  --color-deploy-bg: #eff6ff;
+
+  /* 차트 서비스 선 색. 심각도 색(빨강·주황·초록)과 겹치지 않게 고른다 */
+  --series-1: #2563eb;
+  --series-2: #7c3aed;
+  --series-3: #0d9488;
+  --series-4: #64748b;
+  --series-5: #c026d3;
+  --series-6: #0284c7;
+
+  /* 간격 (4px 단위) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* 글자 */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* 모서리 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 999px;
+
+  /* 그림자 */
+  --shadow-sm: 0 1px 2px rgb(17 24 39 / 0.05);
+  --shadow-md: 0 1px 2px rgb(17 24 39 / 0.06), 0 2px 8px rgb(17 24 39 / 0.06);
+  --shadow-lg: 0 4px 12px rgb(17 24 39 / 0.08), 0 12px 32px rgb(17 24 39 / 0.12);
+
+  /* 포커스 링: 바탕과 링 사이에 흰 틈을 두어 어떤 바탕 위에서도 보이게 한다 */
+  --focus-ring: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-focus);
+
+  --duration-fast: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+  }
+}
