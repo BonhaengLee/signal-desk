@@ -79,3 +79,8 @@ test('펼친 결과: 배열은 항목 하나를 한 줄로, 지표 표는 열 �
   assert.equal(formatResult({ t: [0, 30], cpu: [1.1, 90] }), '{\n  "t": [0,30],\n  "cpu": [1.1,90]\n}');
   assert.equal(formatResult({ ok: true }), '{\n  "ok": true\n}');
 });
+
+test('조사 시작 기록의 atSec 을 보여 준다 (없으면 전체 기록)', () => {
+  const at = summarizeInvestigation([ev(1, 'investigation_started', { scenario: 'silent-db', seed: 42, model: 'm', atSec: 120 }, 'system')]);
+  assert.deepEqual([at.atSec, summarizeInvestigation(base).atSec], [120, undefined]);
+});

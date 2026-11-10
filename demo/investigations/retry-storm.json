@@ -1,22 +1,24 @@
 {
-  "id": "496fce15-062e-40ea-b610-60e6070c106d",
+  "id": "58a99ffa-9251-4c05-a88d-748cd2e6026f",
   "scenario": "retry-storm",
   "seed": 42,
+  "atSec": 120,
   "events": [
     {
       "seq": 1,
-      "at": "2026-11-10T12:33:15.236Z",
+      "at": "2026-11-10T13:15:05.966Z",
       "actor": "system",
       "kind": "investigation_started",
       "payload": {
         "scenario": "retry-storm",
         "seed": 42,
-        "model": "nemotron-3.5-lightning-30b-a3b"
+        "model": "nemotron-3.5-lightning-30b-a3b",
+        "atSec": 120
       }
     },
     {
       "seq": 2,
-      "at": "2026-11-10T12:33:16.629Z",
+      "at": "2026-11-10T13:15:09.292Z",
       "actor": "agent",
       "kind": "tool_call",
       "payload": {
@@ -52,7 +54,7 @@
     },
     {
       "seq": 3,
-      "at": "2026-11-10T12:33:17.516Z",
+      "at": "2026-11-10T13:15:10.495Z",
       "actor": "agent",
       "kind": "tool_call",
       "payload": {
@@ -78,31 +80,14 @@
     },
     {
       "seq": 4,
-      "at": "2026-11-10T12:33:19.131Z",
-      "actor": "agent",
-      "kind": "tool_call",
-      "payload": {
-        "tool": "list_deploys",
-        "args": {},
-        "result": [
-          {
-            "t": 100,
-            "service": "payment-api",
-            "version": "v1.4.3-hotfix"
-          }
-        ]
-      }
-    },
-    {
-      "seq": 5,
-      "at": "2026-11-10T12:33:20.798Z",
+      "at": "2026-11-10T13:15:12.579Z",
       "actor": "agent",
       "kind": "tool_call",
       "payload": {
         "tool": "get_metric",
         "args": {
-          "service": "payment-db",
-          "name": "latency_p99"
+          "name": "latency_p99",
+          "service": "payment-db"
         },
         "result": [
           {
@@ -156,112 +141,141 @@
           {
             "t": 120,
             "max": 783
-          },
+          }
+        ]
+      }
+    },
+    {
+      "seq": 5,
+      "at": "2026-11-10T13:15:13.496Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "list_deploys",
+        "args": {},
+        "result": [
           {
-            "t": 130,
-            "max": 776
-          },
-          {
-            "t": 140,
-            "max": 752
-          },
-          {
-            "t": 150,
-            "max": 789
-          },
-          {
-            "t": 160,
-            "max": 790
-          },
-          {
-            "t": 170,
-            "max": 788
+            "t": 100,
+            "service": "payment-api",
+            "version": "v1.4.3-hotfix"
           }
         ]
       }
     },
     {
       "seq": 6,
-      "at": "2026-11-10T12:33:30.952Z",
+      "at": "2026-11-10T13:15:15.835Z",
       "actor": "agent",
       "kind": "tool_call",
       "payload": {
-        "tool": "submit_root_cause",
+        "tool": "get_logs",
         "args": {
-          "ruledOut": [
-            {
-              "service": "inventory-api",
-              "why": "no alerts and not in dependency chain causing latency"
-            },
-            {
-              "service": "payment-api",
-              "why": "deployment occurred after alerts, so not cause"
-            }
-          ],
-          "service": "payment-db",
-          "kind": "degrade",
-          "evidence": [
-            {
-              "step": 1,
-              "fact": "checkout-api depends on payment-api, payment-api depends on payment-db"
-            },
-            {
-              "step": 2,
-              "fact": "payment-db latency_p99 alert firing at T+60s, rule latency_p99 > 200ms"
-            },
-            {
-              "step": 3,
-              "fact": "payment-api deployed at T+100s, after alerts, thus not root cause"
-            },
-            {
-              "step": 4,
-              "fact": "payment-db latency_p99 max 721ms at T+60s, far above threshold 200ms"
-            }
-          ],
-          "summary": "payment-db 지연이 먼저 발생하고 checkout-api 응답 지연이 따라왔다"
+          "service": "payment-db"
         },
-        "result": {
-          "error": "evidence.fact 는 한국어 한 줄 (200자 이하) / ruledOut.why 는 한국어 한 줄 (200자 이하)"
-        }
+        "result": [
+          {
+            "message": "request queue growing (utilization N%)",
+            "level": "warn",
+            "first": 60,
+            "count": 7
+          }
+        ]
       }
     },
     {
       "seq": 7,
-      "at": "2026-11-10T12:33:37.322Z",
+      "at": "2026-11-10T13:15:29.545Z",
       "actor": "agent",
       "kind": "tool_call",
       "payload": {
         "tool": "submit_root_cause",
         "args": {
+          "kind": "degrade",
+          "service": "payment-db",
+          "summary": "payment-db latency_p99 spiked from ~21ms to ~721ms at T+60, causing downstream payment-api and checkout-api response delays; the spike predates the only deployment (payment-api at T+100).",
           "evidence": [
             {
               "step": 1,
-              "fact": "checkout-api는 payment-api를 호출하고 payment-api는 payment-db를 호출함"
+              "fact": "checkout-api depends on payment-api and inventory-api"
             },
             {
               "step": 2,
-              "fact": "payment-db latency_p99 경보가 T+60s에 발령, 임계치 200ms 초과"
+              "fact": "payment-db latency_p99 alert firing at T+60"
             },
             {
               "step": 3,
-              "fact": "payment-api는 T+100s에 배포돼 경보 이후라 원인 아님"
+              "fact": "payment-db latency_p99 max 721ms at T+60, remained high for subsequent intervals"
             },
             {
               "step": 4,
-              "fact": "payment-db latency_p99 최대 721ms로 T+60s부터 급증, 임계치 초과"
-            }
-          ],
-          "summary": "payment-db 지연이 먼저 발생하고 checkout-api 응답 지연이 따라왔다",
-          "kind": "degrade",
-          "service": "payment-db",
-          "ruledOut": [
-            {
-              "service": "inventory-api",
-              "why": "알림 없음 및 지연 연관성 없음"
+              "fact": "payment-api deployment at T+100 occurred after the latency spike"
             },
             {
+              "step": 5,
+              "fact": "payment-db request queue growing from T+60 (7 warnings)"
+            }
+          ],
+          "ruledOut": [
+            {
               "service": "payment-api",
-              "why": "경보 이후 배포돼 원인 아님"
+              "why": "deployment at T+100 occurred after latency spike at T+60, so not the root cause"
+            },
+            {
+              "service": "inventory-api",
+              "why": "no alerts or metric degradation; no external DB dependency contributing to the spike"
+            },
+            {
+              "service": "checkout-api",
+              "why": "symptom service experiencing latency, not the underlying cause"
+            }
+          ]
+        },
+        "result": {
+          "error": "summary 는 한국어 한 문장 (200자 이하) / evidence 는 1~4개 배열 / ruledOut.why 는 한국어 한 줄 (200자 이하)"
+        }
+      }
+    },
+    {
+      "seq": 8,
+      "at": "2026-11-10T13:15:37.253Z",
+      "actor": "agent",
+      "kind": "tool_call",
+      "payload": {
+        "tool": "submit_root_cause",
+        "args": {
+          "kind": "degrade",
+          "service": "payment-db",
+          "summary": "payment-db 지연이 먼저 발생해 위쪽 서비스에 전파된 경우",
+          "ruledOut": [
+            {
+              "service": "payment-api",
+              "why": "T+100 배포는 T+60 지연 spike 이후이므로 원인 아님"
+            },
+            {
+              "service": "inventory-api",
+              "why": "알림이나 지표 저하가 없어 원인 아님"
+            },
+            {
+              "service": "checkout-api",
+              "why": "증상 서비스이며 근본 원인이 아님"
+            }
+          ],
+          "evidence": [
+            {
+              "step": 1,
+              "fact": "checkout-api는 payment-api와 inventory-api를 의존함"
+            },
+            {
+              "step": 2,
+              "fact": "payment-db latency_p99 경보가 T+60에 발령됨"
+            },
+            {
+              "step": 3,
+              "fact": "payment-db latency_p99 최대 721ms로 T+60 이후 급증"
+            },
+            {
+              "step": 5,
+              "fact": "payment-db 요청 큐가 T+60부터 차오르며 7건의 경고 발생"
             }
           ]
         },
@@ -271,51 +285,55 @@
       }
     },
     {
-      "seq": 8,
-      "at": "2026-11-10T12:33:37.322Z",
+      "seq": 9,
+      "at": "2026-11-10T13:15:37.253Z",
       "actor": "agent",
       "kind": "verdict",
       "payload": {
         "service": "payment-db",
         "kind": "degrade",
-        "summary": "payment-db 지연이 먼저 발생하고 checkout-api 응답 지연이 따라왔다",
+        "summary": "payment-db 지연이 먼저 발생해 위쪽 서비스에 전파된 경우",
         "evidence": [
           {
             "step": 1,
-            "fact": "checkout-api는 payment-api를 호출하고 payment-api는 payment-db를 호출함"
+            "fact": "checkout-api는 payment-api와 inventory-api를 의존함"
           },
           {
             "step": 2,
-            "fact": "payment-db latency_p99 경보가 T+60s에 발령, 임계치 200ms 초과"
+            "fact": "payment-db latency_p99 경보가 T+60에 발령됨"
           },
           {
             "step": 3,
-            "fact": "payment-api는 T+100s에 배포돼 경보 이후라 원인 아님"
+            "fact": "payment-db latency_p99 최대 721ms로 T+60 이후 급증"
           },
           {
-            "step": 4,
-            "fact": "payment-db latency_p99 최대 721ms로 T+60s부터 급증, 임계치 초과"
+            "step": 5,
+            "fact": "payment-db 요청 큐가 T+60부터 차오르며 7건의 경고 발생"
           }
         ],
         "ruledOut": [
           {
-            "service": "inventory-api",
-            "why": "알림 없음 및 지연 연관성 없음"
+            "service": "payment-api",
+            "why": "T+100 배포는 T+60 지연 spike 이후이므로 원인 아님"
           },
           {
-            "service": "payment-api",
-            "why": "경보 이후 배포돼 원인 아님"
+            "service": "inventory-api",
+            "why": "알림이나 지표 저하가 없어 원인 아님"
+          },
+          {
+            "service": "checkout-api",
+            "why": "증상 서비스이며 근본 원인이 아님"
           }
         ]
       }
     },
     {
-      "seq": 9,
-      "at": "2026-11-10T12:33:37.322Z",
+      "seq": 10,
+      "at": "2026-11-10T13:15:37.253Z",
       "actor": "agent",
       "kind": "proposal",
       "payload": {
-        "proposalId": "64bdf5f7-291c-4986-a22d-983f8b35e4e1",
+        "proposalId": "c494a182-ffc5-45bd-bd46-1932ec249455",
         "action": {
           "type": "escalate",
           "service": "payment-db"

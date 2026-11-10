@@ -109,12 +109,16 @@ export async function demoSubscribe(url: string, opts: SubscribeOptions): Promis
   }
 }
 
-/** 이 시나리오의 녹화 id. 녹화가 없으면 404 와 같은 오류 */
-export async function demoStart(scenario: string): Promise<string> {
-  const index = await json<Record<string, string>>('investigations/index.json');
-  const id = index[scenario];
-  if (!id) throw new DemoError(404, `${scenario} 는 데모 녹화가 없습니다`);
-  return id;
+/** 이 시나리오의 녹화 id. 녹화는 정해진 시점(atSec)까지의 기록으로 돌린 조사라, 재생이 그 시점 전이면 아직 쓸 수 없다 */
+export async function demoStart(scenario: string, nowSec: number): Promise<string> {
+  const index = await json<Record<string, { id: string; atSec: number }>>('investigations/index.json');
+  const rec = index[scenario];
+  if (!rec) throw new DemoError(404, `${scenario} 는 데모 녹화가 없습니다`);
+  if (nowSec < rec.atSec) {
+    const mmss = `${String(Math.floor(rec.atSec / 60)).padStart(2, '0')}:${String(rec.atSec % 60).padStart(2, '0')}`;
+    throw new DemoError(409, `데모 녹화는 T+${mmss} 시점까지의 기록으로 돌린 조사입니다. 재생이 그 시점을 지나면 다시 눌러 주세요`);
+  }
+  return rec.id;
 }
 
 /** 브라우저 안 결정. 규칙은 서버(src/audit/store.ts decide)와 같다 */

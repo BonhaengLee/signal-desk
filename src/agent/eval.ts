@@ -9,14 +9,18 @@ import type { Judgement, ToolContext, Verdict } from './tools.ts';
 
 export const SCENARIO_FILES = ['deploy-regression', 'db-degradation', 'retry-storm', 'silent-db', 'hidden-deploy'];
 
-export function contextFor(scenario: Scenario, seed: number): ToolContext {
+/** 조사 대상. atSec 을 주면 시나리오 시작부터 그 초까지의 이벤트만 넘긴다 (화면이 보고 있는 시점까지만 아는 에이전트).
+ *  평가는 atSec 없이 전체 기록으로 채점한다 */
+export function contextFor(scenario: Scenario, seed: number, atSec?: number): ToolContext {
+  const start = Date.parse(scenario.startAt);
+  const all = [...simulate(scenario, seed)];
   return {
-    events: [...simulate(scenario, seed)],
+    events: atSec === undefined ? all : all.filter((e) => (e.at.getTime() - start) / 1000 <= atSec),
     topology: {
       entry: scenario.entry,
       services: scenario.services.map((s) => ({ name: s.name, dependsOn: s.dependsOn ?? [] })),
     },
-    startMs: Date.parse(scenario.startAt),
+    startMs: start,
   };
 }
 

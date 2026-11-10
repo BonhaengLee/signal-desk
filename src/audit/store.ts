@@ -90,11 +90,11 @@ export class AuditStore {
     this.now = now;
   }
 
-  createInvestigation(scenario: string, seed: number, model: string): string {
+  createInvestigation(scenario: string, seed: number, model: string, atSec?: number): string {
     const id = randomUUID();
     this.db.prepare('INSERT INTO investigations (id, scenario, seed, model, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(id, scenario, seed, model, this.now().toISOString());
-    this.append(id, 'system', 'investigation_started', { scenario, seed, model });
+    this.append(id, 'system', 'investigation_started', { scenario, seed, model, ...(atSec === undefined ? {} : { atSec }) });
     return id;
   }
 

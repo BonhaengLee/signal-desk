@@ -1,5 +1,5 @@
 // 조사·승인 API. SSE 서버에 붙는 라우트 묶음
-//   POST /investigations                { scenario, seed? }               → 202 { id }  (조사는 뒤에서 돈다)
+//   POST /investigations                { scenario, seed?, atSec? }       → 202 { id }  (조사는 뒤에서 돈다. atSec 을 주면 그 초까지의 기록만 본다)
 //   GET  /investigations/:id                                              → { events, proposals }
 //   GET  /investigations/:id/stream     감사 로그를 SSE 로. id = seq 라 Last-Event-ID 로 이어 받는다
 //   POST /proposals/:id/decision        { operator, decision, reason? }   → 승인이면 실행까지 기록. 이미 결정됐으면 409
@@ -75,8 +75,13 @@ export function createApiHandler(opts: ApiOptions) {
         return true;
       }
       const s = JSON.parse(readFileSync(new URL(`${scenario}.json`, dir), 'utf8')) as Scenario;
-      const id = store.createInvestigation(scenario, seed, model);
-      const job = runInvestigation(store, id, contextFor(s, seed), chat).finally(() => running.delete(job));
+      const atSec = body?.atSec === undefined ? undefined : Number(body.atSec);
+      if (atSec !== undefined && !(Number.isFinite(atSec) && atSec >= 0 && atSec <= s.durationSec)) {
+        json(res, 400, { error: `atSec 은 0~${s.durationSec} 초` });
+        return true;
+      }
+      const id = store.createInvestigation(scenario, seed, model, atSec);
+      const job = runInvestigation(store, id, contextFor(s, seed, atSec), chat).finally(() => running.delete(job));
       running.add(job);
       json(res, 202, { id });
       return true;

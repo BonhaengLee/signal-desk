@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AuditEvent } from '../src/audit/store.ts';
-import { demoDecide, playbackGaps, STEP_MAX_MS, STEP_MIN_MS } from '../src/web/demo.ts';
+import { demoDecide, demoStart, playbackGaps, STEP_MAX_MS, STEP_MIN_MS } from '../src/web/demo.ts';
 import { demoEvents } from '../scripts/build-demo.ts';
 import { readFileSync } from 'node:fs';
 
@@ -32,4 +32,18 @@ test('데모 이벤트 파일에는 시나리오 정답과 설명이 들어가�
   const s = JSON.parse(readFileSync('scenarios/db-degradation.json', 'utf8'));
   const out = JSON.stringify(demoEvents(s));
   assert.deepEqual([out.includes('rootCause'), out.includes('description'), out.includes(s.description)], [false, false, false]);
+});
+
+test('데모 녹화는 녹화 시점 전에 누르면 시작하지 않는다', async () => {
+  const real = globalThis.fetch;
+  globalThis.fetch = (async () => ({ ok: true, json: async () => ({ 'db-degradation': { id: 'rec-1', atSec: 120 } }) })) as unknown as typeof fetch;
+  try {
+    const early = await demoStart('db-degradation', 90).catch((e: { status: number; message: string }) => `${e.status} ${e.message}`);
+    assert.deepEqual(
+      [early, await demoStart('db-degradation', 120), await demoStart('retry-storm', 150).catch((e: { status: number }) => e.status)],
+      ['409 데모 녹화는 T+02:00 시점까지의 기록으로 돌린 조사입니다. 재생이 그 시점을 지나면 다시 눌러 주세요', 'rec-1', 404],
+    );
+  } finally {
+    globalThis.fetch = real;
+  }
 });

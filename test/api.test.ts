@@ -88,3 +88,26 @@ test('잘못된 입력은 400·404, 모델 오류는 investigation_failed 로 �
     await t.close();
   }
 });
+
+test('atSec 을 주면 그 초까지의 기록만 에이전트에게 넘기고, 범위를 벗어나면 400', async () => {
+  // 배포 목록을 본 결과를 그대로 기록해 두는 가짜 모델
+  const seen: unknown[] = [];
+  const chat: ChatFn = async (messages) => {
+    const last = messages.at(-1)!;
+    if (last.role === 'tool') seen.push(JSON.parse(last.content!).result);
+    return fakeChat(messages, []);
+  };
+  const t = await start(chat);
+  try {
+    // hidden-deploy 배포: payment-api T+60, inventory-api T+65
+    const res = await t.post('/investigations', { scenario: 'hidden-deploy', seed: 1, atSec: 62 });
+    const { id } = (await res.json()) as { id: string };
+    await t.api.idle();
+    assert.deepEqual(seen[0], [{ t: 60, service: 'payment-api', version: 'v1.4.2' }]);
+    assert.deepEqual(t.store.events(id)[0]!.payload, { scenario: 'hidden-deploy', seed: 1, model: 'fake', atSec: 62 });
+    const bad = await Promise.all([-1, 181, 'x'].map((atSec) => t.post('/investigations', { scenario: 'hidden-deploy', atSec }).then((r) => r.status)));
+    assert.deepEqual(bad, [400, 400, 400]);
+  } finally {
+    await t.close();
+  }
+});

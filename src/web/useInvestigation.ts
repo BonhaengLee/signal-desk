@@ -58,9 +58,9 @@ async function demoCall<T>(f: () => T | Promise<T>): Promise<T> {
   }
 }
 
-export async function startInvestigation(scenario: string, seed: number): Promise<string> {
-  if (DEMO) return demoCall(() => demoStart(scenario));
-  const r = (await post('/investigations', { scenario, seed })) as { id: string };
+export async function startInvestigation(scenario: string, seed: number, atSec: number): Promise<string> {
+  if (DEMO) return demoCall(() => demoStart(scenario, atSec));
+  const r = (await post('/investigations', { scenario, seed, atSec })) as { id: string };
   return r.id;
 }
 

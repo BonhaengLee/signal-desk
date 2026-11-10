@@ -16,6 +16,7 @@ export interface InvestigationView {
   scenario?: string;
   seed?: number;
   model?: string;
+  atSec?: number; // 이 초까지의 기록으로 조사했다. 없으면 전체 기록
   /** running: 조사 중, proposed: 승인 대기, decided: 거절 또는 실행됨, failed: 결론을 못 냄 */
   phase: 'running' | 'proposed' | 'decided' | 'failed';
   steps: InvestigationStep[];
@@ -49,6 +50,7 @@ export function summarizeInvestigation(events: readonly AuditEvent[]): Investiga
         v.scenario = String(p.scenario ?? '');
         v.seed = Number(p.seed);
         v.model = String(p.model ?? '');
+        if (typeof p.atSec === 'number') v.atSec = p.atSec;
         break;
       case 'tool_call':
         v.steps.push({ seq: e.seq, at: e.at, tool: String(p.tool ?? ''), args: rec(p.args), result: p.result });

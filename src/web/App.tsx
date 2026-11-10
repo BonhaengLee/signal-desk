@@ -337,7 +337,7 @@ export function App() {
             )}
           </div>
         </Card>
-        <InvestigationPanel scenario={scenarioName} />
+        <InvestigationPanel scenario={scenarioName} nowSec={timeline.now} alerted={timeline.spans.length > 0} />
       </main>
     </div>
   );

@@ -5,6 +5,7 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { Action } from '../audit/store.ts';
 import type { Verdict } from '../agent/tools.ts';
 import { formatCall, formatResult, previewResult, type InvestigationView } from './investigation.ts';
+import { formatElapsed } from './derive.ts';
 import { ApiError, decideProposal, startInvestigation, useInvestigation } from './useInvestigation.ts';
 import { DEMO } from './demo.ts';
 import { Badge, Card, EmptyState, VisuallyHidden, type Tone } from './ui/controls.tsx';
@@ -44,7 +45,11 @@ function writeInv(id: string | undefined) {
   history.replaceState(history.state, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash}`);
 }
 
-export function InvestigationPanel({ scenario }: { scenario: string }) {
+/**
+ * scenario: 화면이 재생 중인 시나리오. nowSec: 지금 재생 위치(시나리오 경과 초). alerted: 이번 재생에서 경보가 한 번이라도 울렸는가.
+ * 조사는 nowSec 까지의 기록만 본다. 경보가 울리기 전에는 조사할 대상이 없어 버튼을 끈다
+ */
+export function InvestigationPanel({ scenario, nowSec, alerted }: { scenario: string; nowSec: number; alerted: boolean }) {
   const [id, setId] = useState(readInv);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
@@ -56,7 +61,7 @@ export function InvestigationPanel({ scenario }: { scenario: string }) {
     setStarting(true);
     setError(undefined);
     try {
-      setId(await startInvestigation(scenario, SEED));
+      setId(await startInvestigation(scenario, SEED, Math.floor(nowSec)));
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 404 && !DEMO
@@ -78,10 +83,17 @@ export function InvestigationPanel({ scenario }: { scenario: string }) {
           {phase && <Badge tone={phase.tone}>{phase.label}</Badge>}
         </>
       }
-      meta={view?.scenario && `${view.scenario} · 시드 ${view.seed}`}
+      // 시나리오 이름은 상단 선택 상자에 있다. 지금 화면과 다른 시나리오를 조사한 기록일 때만 붙인다
+      meta={view && `${view.scenario && view.scenario !== scenario ? `${view.scenario} · ` : ''}${view.atSec === undefined ? '전체 기록' : `${formatElapsed(view.atSec)} 까지의 기록`}`}
       actions={
-        <button type="button" className={s.primary} onClick={start} disabled={starting}>
-          {starting ? '시작하는 중…' : id ? '새로 조사' : '이 시나리오 조사'}
+        <button
+          type="button"
+          className={s.primary}
+          onClick={start}
+          disabled={starting || !alerted}
+          title={alerted ? `${formatElapsed(Math.floor(nowSec))} 까지의 기록으로 조사합니다` : '경보가 울리면 조사할 수 있습니다'}
+        >
+          {starting ? '시작하는 중…' : id ? '다시 조사' : '지금 시점까지 조사'}
         </button>
       }
       className={`${s.card} area-inv`}
@@ -93,9 +105,10 @@ export function InvestigationPanel({ scenario }: { scenario: string }) {
         </p>
       )}
       {!id ? (
-        <EmptyState title="아직 조사하지 않았습니다">
-          에이전트가 경보·지표·로그·배포를 차례로 보고 원인과 조치를 제안합니다. 조치는 사람이 승인해야 실행됩니다. 조사는 화면 재생 위치와 상관없이 이 시나리오의 전체 기록을 봅니다
-          {DEMO && '. 데모는 실제 모델로 미리 돌린 조사를 재생하고, 승인·거절은 이 브라우저에만 반영됩니다'}
+        <EmptyState title={alerted ? '아직 조사하지 않았습니다' : '경보를 기다리는 중'}>
+          {alerted ? '' : '경보가 울리면 조사할 수 있습니다. '}
+          에이전트는 누른 시점까지의 경보·지표·로그·배포만 보고 원인과 조치를 제안합니다. 조치는 사람이 승인해야 실행됩니다
+          {DEMO && '. 데모는 실제 모델로 T+02:00 시점에 돌린 조사를 재생하고, 승인·거절은 이 브라우저에만 반영됩니다'}
         </EmptyState>
       ) : !view ? (
         <EmptyState title={status === 'error' ? '조사 기록에 다시 연결하는 중' : '조사 기록을 불러오는 중'} />
