@@ -12,7 +12,7 @@ const fakeChat: ChatFn = async (messages) => {
   const turn = messages.filter((m) => m.role === 'assistant').length;
   const call = turn === 0
     ? { name: 'list_deploys', arguments: '{}' }
-    : { name: 'submit_root_cause', arguments: JSON.stringify({ service: 'payment-api', kind: 'deploy', evidence: 'T+60 배포 직후 p99 상승' }) };
+    : { name: 'submit_root_cause', arguments: JSON.stringify({ service: 'payment-api', kind: 'deploy', summary: '배포 직후 지연이 올랐다', evidence: [{ step: 1, fact: 'T+60 payment-api 배포' }], ruledOut: [{ service: 'payment-db', why: '지연 변화 없음' }] }) };
   return { role: 'assistant', content: null, tool_calls: [{ id: `c${turn}`, function: call }] };
 };
 

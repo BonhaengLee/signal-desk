@@ -93,7 +93,7 @@ export async function evaluateRca(chat: ChatFn, names: string[], opts: { mode?: 
 }
 
 export function summarizeRca(rows: RcaRow[]): string {
-  const lines = ['| 장애 종류 | 에이전트 | 첫 경보 서비스 탓 | 가장 크게 변한 지표 | 보완 규칙(순위 1위) | 평균 도구 호출 |', '|---|---|---|---|---|---|'];
+  const lines = ['| 장애 종류 | 에이전트 | 첫 경보 서비스를 원인으로 | 가장 크게 변한 지표 | 보완 규칙(순위 1위) | 평균 도구 호출 |', '|---|---|---|---|---|---|'];
   for (const g of [...new Set(rows.map((r) => r.fault)), '전체']) {
     const rs = g === '전체' ? rows : rows.filter((r) => r.fault === g);
     const m = rs.filter((r) => r.measured);

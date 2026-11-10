@@ -3,10 +3,10 @@
 import type { AuditStore, Action } from '../audit/store.ts';
 import type { SignalEvent } from '../events/schema.ts';
 import { investigate, type ChatFn } from './agent.ts';
-import type { ToolContext, Verdict } from './tools.ts';
+import type { Judgement, ToolContext } from './tools.ts';
 
 /** 결론 → 조치. deploy 탓이면 그 서비스의 마지막 배포를 되돌리고, 아니면 담당자를 호출한다 */
-export function proposeAction(verdict: Verdict, events: SignalEvent[]): Action {
+export function proposeAction(verdict: Judgement, events: SignalEvent[]): Action {
   if (verdict.kind === 'deploy') {
     const last = events.filter((e) => e.type === 'deploy' && e.service === verdict.service).at(-1);
     const version = last?.type === 'deploy' ? last.payload.version : undefined;

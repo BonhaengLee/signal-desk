@@ -119,11 +119,12 @@ code {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(400px, 34%) 1fr;
+  /* 오른쪽 열은 조사 패널. 장애 화면을 보면서 옆에서 조사 과정을 따라간다 */
+  grid-template-columns: minmax(340px, 28%) minmax(0, 1fr) minmax(360px, 30%);
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
-    'timeline timeline'
-    'side feed';
+    'timeline timeline inv'
+    'side feed inv';
   gap: var(--space-3);
   padding: var(--space-3);
   min-height: 0;
@@ -137,6 +138,10 @@ code {
   grid-template-rows: minmax(0, 1fr) auto;
   gap: var(--space-3);
   min-height: 0;
+}
+
+.area-inv {
+  grid-area: inv;
 }
 .area-feed {
   grid-area: feed;

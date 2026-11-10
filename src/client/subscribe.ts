@@ -15,10 +15,10 @@ export interface SubscribeOptions {
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>; // 테스트에서 바꿔 끼운다
 }
 
-/** 'cycle:seq' 를 비교 가능한 쌍으로. 형식이 다르면 undefined (거르지 않는다) */
-function order(id: string | undefined): [number, number] | undefined {
-  const m = /^(\d+):(\d+)$/.exec(id ?? '');
-  return m ? [Number(m[1]), Number(m[2])] : undefined;
+/** 'cycle:seq' 또는 'seq'(조사 스트림) 를 비교 가능한 쌍으로. 형식이 다르면 undefined (거르지 않는다) */
+export function order(id: string | undefined): [number, number] | undefined {
+  const m = /^(?:(\d+):)?(\d+)$/.exec(id ?? '');
+  return m ? [Number(m[1] ?? 0), Number(m[2])] : undefined;
 }
 
 const after = (a: [number, number], b: [number, number]) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);

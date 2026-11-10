@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { simulate, type Scenario } from '../simulator/simulate.ts';
 import { investigate, openAiChat, type ChatFn } from './agent.ts';
 import { firstAlertBaseline, latestDeployBaseline } from './baseline.ts';
-import type { ToolContext, Verdict } from './tools.ts';
+import type { Judgement, ToolContext, Verdict } from './tools.ts';
 
 export const SCENARIO_FILES = ['deploy-regression', 'db-degradation', 'retry-storm', 'silent-db', 'hidden-deploy'];
 
@@ -20,7 +20,7 @@ export function contextFor(scenario: Scenario, seed: number): ToolContext {
   };
 }
 
-export const isCorrect = (v: Verdict | undefined, s: Scenario) =>
+export const isCorrect = (v: Judgement | undefined, s: Scenario) =>
   v !== undefined && v.service === s.rootCause.service && v.kind === s.rootCause.kind;
 
 export interface Row {
@@ -29,12 +29,24 @@ export interface Row {
   agent: string; // "payment-api/deploy" 또는 실패 사유
   agentOk: boolean;
   measured: boolean; // false = API 오류로 결론을 못 냄. 오답이 아니라 측정 불가로 따로 센다
-  baseline: string; // 최근 배포 탓
+  baseline: string; // 최근 배포를 원인으로
   baselineOk: boolean;
-  firstAlert: string; // 첫 경보 서비스 탓
+  firstAlert: string; // 첫 경보 서비스를 원인으로
   firstAlertOk: boolean;
   steps: number;
   ms: number;
+  stopReason?: string; // submitted, max_steps, no_tool_call
+  formatRejects?: number; // 형식이 틀려 돌려보낸 제출 수
+  trace?: string[]; // 단계 기록. 결과가 왜 바뀌었는지 다시 돌리지 않고 보려고 남긴다 (모델 출력은 매번 달라 재실행은 다른 표본이다)
+}
+
+/** 단계 한 줄: get_metric(payment-db, latency_p99) 또는 submit_root_cause ✖ 오류 */
+export function traceLine(tool: string, args: Record<string, unknown>, result: unknown): string {
+  if (tool === 'submit_root_cause') {
+    const err = (result as { error?: string } | undefined)?.error;
+    return err ? `submit_root_cause ✖ ${err}` : `submit_root_cause ✔ ${args.service}/${args.kind}`;
+  }
+  return `${tool}(${Object.values(args).map((v) => (typeof v === 'string' ? v : JSON.stringify(v))).join(', ')})`;
 }
 
 export interface EvalOptions {
@@ -63,10 +75,13 @@ export async function evaluate(chat: ChatFn, seeds: number[], opts: EvalOptions 
       let verdict: Verdict | undefined;
       let steps = 0;
       let measured = true;
+      let stopReason: string | undefined;
+      const trace: string[] = [];
       try {
-        const r = await investigate(ctx, chat);
+        const r = await investigate(ctx, chat, { onStep: (st, result) => trace.push(traceLine(st.tool, st.args, result)) });
         verdict = r.verdict;
         steps = r.steps.length;
+        stopReason = r.stopReason;
         agent = verdict ? `${verdict.service}/${verdict.kind}` : r.stopReason;
       } catch (e) {
         agent = `오류: ${(e as Error).message.slice(0, 40)}`;
@@ -84,6 +99,9 @@ export async function evaluate(chat: ChatFn, seeds: number[], opts: EvalOptions 
         firstAlertOk: isCorrect(first, scenario),
         steps,
         ms: Math.round(performance.now() - t0),
+        stopReason,
+        formatRejects: trace.filter((l) => l.startsWith('submit_root_cause ✖')).length,
+        trace,
       });
       console.error(`${name} seed=${seed} agent=${agent} base=${rows.at(-1)!.baseline}`);
       opts.onRow?.(rows); // 중간에 끊겨도 끝난 건은 남긴다
@@ -92,8 +110,17 @@ export async function evaluate(chat: ChatFn, seeds: number[], opts: EvalOptions 
   return rows;
 }
 
+/** 기록이 있는 건만 더한다. 예전 결과 파일처럼 기록이 없으면 '-' */
+function known(rows: Row[], f: (r: Row) => number | undefined): string {
+  const xs = rows.map(f).filter((x): x is number => x !== undefined);
+  return xs.length ? String(xs.reduce((a, b) => a + b, 0)) : '-';
+}
+
 export function summarize(rows: Row[]): string {
-  const lines = ['| 시나리오 | 에이전트 | 최근 배포 탓 | 첫 경보 서비스 탓 | 평균 도구 호출 | 평균 소요(s) |', '|---|---|---|---|---|---|'];
+  const lines = [
+    '| 시나리오 | 에이전트 | 최근 배포를 원인으로 | 첫 경보 서비스를 원인으로 | 평균 도구 호출 | 평균 소요(s) | 호출 상한 도달 | 형식 거부 |',
+    '|---|---|---|---|---|---|---|---|',
+  ];
   const groups = [...new Set(rows.map((r) => r.scenario)), '전체'];
   for (const g of groups) {
     const rs = g === '전체' ? rows : rows.filter((r) => r.scenario === g);
@@ -102,7 +129,7 @@ export function summarize(rows: Row[]): string {
     const avg = (f: (r: Row) => number) => (ms.length ? ms.reduce((a, r) => a + f(r), 0) / ms.length : NaN).toFixed(1);
     const lost = n - ms.length;
     lines.push(
-      `| ${g} | ${ms.filter((r) => r.agentOk).length}/${ms.length}${lost ? ` (측정 불가 ${lost})` : ''} | ${rs.filter((r) => r.baselineOk).length}/${n} | ${rs.filter((r) => r.firstAlertOk).length}/${n} | ${avg((r) => r.steps)} | ${avg((r) => r.ms / 1000)} |`,
+      `| ${g} | ${ms.filter((r) => r.agentOk).length}/${ms.length}${lost ? ` (측정 불가 ${lost})` : ''} | ${rs.filter((r) => r.baselineOk).length}/${n} | ${rs.filter((r) => r.firstAlertOk).length}/${n} | ${avg((r) => r.steps)} | ${avg((r) => r.ms / 1000)} | ${known(ms, (r) => (r.stopReason === undefined ? undefined : r.stopReason === 'max_steps' ? 1 : 0))} | ${known(ms, (r) => r.formatRejects)} |`,
     );
   }
   return lines.join('\n');

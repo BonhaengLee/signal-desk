@@ -1,0 +1,285 @@
+/* 조사 패널. 값은 tokens.css 변수만 쓴다 */
+.card {
+  min-height: 0;
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  overflow-y: auto;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.step {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  font-size: var(--text-sm);
+}
+.stepNo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-full);
+}
+.stepMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.stepTool {
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+.stepDetail summary {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.stepDetail summary:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: var(--focus-ring);
+}
+.stepDetail summary code {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stepPreview {
+  flex: 1;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stepDetail pre {
+  max-height: 200px;
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2);
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-md);
+}
+.stepWaiting {
+  align-self: center;
+  color: var(--color-text-muted);
+}
+
+.verdict,
+.proposal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.verdict h3,
+.proposal h3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+.verdictService {
+  font-family: var(--font-mono);
+}
+.summary {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--color-text);
+}
+.facts {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.facts dt {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+.facts dd {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: baseline;
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+.stepRef {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  text-decoration: none;
+  background: var(--color-accent-soft);
+  border-radius: var(--radius-full);
+}
+a.stepRef:hover {
+  text-decoration: underline;
+}
+a.stepRef:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: var(--focus-ring);
+}
+.facts dd.ruled {
+  display: block;
+}
+.ruledService {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+.subhead {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.subheadMeta {
+  font-weight: var(--weight-regular);
+  color: var(--color-text-muted);
+}
+.step[data-focused] .stepNo {
+  color: var(--color-surface);
+  background: var(--color-accent);
+}
+.proposal {
+  background: var(--color-warn-bg);
+  border-color: var(--color-warn-border);
+}
+.decidedBy {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.field label {
+  font-weight: var(--weight-medium);
+}
+.field input,
+.field textarea {
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+.field input:focus-visible,
+.field textarea:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: var(--focus-ring);
+}
+.field input[aria-invalid='true'] {
+  border-color: var(--color-error);
+}
+.hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.primary,
+.secondary,
+.danger {
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.primary {
+  color: var(--color-surface);
+  background: var(--color-accent);
+}
+.secondary {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+}
+.danger {
+  color: var(--color-surface);
+  background: var(--color-error-fg);
+}
+.primary:focus-visible,
+.secondary:focus-visible,
+.danger:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: var(--focus-ring);
+}
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-error-fg);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius-md);
+}
+
+/* 카드 머리: 열이 좁아도 제목·버튼은 한 줄, 시나리오 이름은 말줄임 */
+.card > header h2,
+.primary,
+.secondary,
+.danger {
+  white-space: nowrap;
+}
+.card > header > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

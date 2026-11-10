@@ -3,6 +3,7 @@ import type { AlertEvent, SignalEvent } from '../events/schema.ts';
 import { useSignalStream, type StreamStatus } from './useSignalStream.ts';
 import { EventList, describe } from './EventList.tsx';
 import { Timeline } from './Timeline.tsx';
+import { InvestigationPanel } from './Investigation.tsx';
 import {
   SEVERITIES,
   buildTimeline,
@@ -330,6 +331,7 @@ export function App() {
             )}
           </div>
         </Card>
+        <InvestigationPanel scenario={scenarioName} />
       </main>
     </div>
   );

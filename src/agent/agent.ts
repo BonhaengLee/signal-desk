@@ -31,11 +31,15 @@ export interface InvestigateResult {
   stopReason: 'submitted' | 'max_steps' | 'no_tool_call';
 }
 
+export const FORMAT_RETRIES = 2;
+
 const SYSTEM = `장애 조사 에이전트다. 도구로 증거를 모아 근본 원인 서비스 하나와 종류(deploy/degrade)를 제출한다.
 - 경보가 먼저 울린 곳이 원인이라고 단정하지 않는다. 호출 관계상 아래쪽(의존 대상)을 확인한다
 - 배포가 있었다고 원인이라고 단정하지 않는다. 지표가 배포 시점 직후에 나빠졌는지 시각을 비교한다
 - 증상 이후의 배포는 원인이 될 수 없다
-- 확인이 끝나면 submit_root_cause 를 한 번 호출한다`;
+- 도구 결과에는 step 번호가 붙어 있다. 근거는 그 번호로 가리킨다
+- 원인으로 의심했다가 버린 서비스와 그 이유도 적는다
+- 확인이 끝나면 submit_root_cause 를 한 번 호출한다. 글은 모두 한국어로 쓴다`;
 
 export async function investigate(ctx: ToolContext, chat: ChatFn, { maxSteps = 10, onStep }: InvestigateOptions = {}): Promise<InvestigateResult> {
   const known = new Set(ctx.topology.services.map((s) => s.name));
@@ -47,7 +51,10 @@ export async function investigate(ctx: ToolContext, chat: ChatFn, { maxSteps = 1
   const steps: Step[] = [];
   let nudged = false;
 
-  for (let turn = 0; turn < maxSteps; turn++) {
+  // 형식이 틀려 돌려보낸 제출은 조사 횟수에서 빼 준다(최대 FORMAT_RETRIES 번). 형식을 고치느라 조사가 잘리지 않게 한다
+  let budget = maxSteps;
+  let formatRetries = 0;
+  for (let turn = 0; turn < budget; turn++) {
     const reply = await chat(messages, specs);
     messages.push(reply);
     const calls = reply.tool_calls ?? [];
@@ -68,15 +75,20 @@ export async function investigate(ctx: ToolContext, chat: ChatFn, { maxSteps = 1
       }
       steps.push({ tool: call.function.name, args });
       if (call.function.name === 'submit_root_cause') {
-        const v = parseVerdict(args, known);
+        const v = parseVerdict(args, known, steps.slice(0, -1));
         onStep?.(steps.at(-1)!, v.ok ? { ok: true } : { error: v.error });
         if (v.ok) return { verdict: v.verdict, steps, stopReason: 'submitted' };
-        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: v.error }) });
+        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ step: steps.length, error: v.error }) });
+        if (formatRetries < FORMAT_RETRIES) {
+          formatRetries += 1;
+          budget += 1;
+        }
         continue;
       }
       const result = runTool(ctx, call.function.name, args);
       onStep?.(steps.at(-1)!, result);
-      messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+      // 근거를 낼 때 가리킬 수 있게 호출 번호를 붙여 돌려준다 (화면의 단계 번호와 같다)
+      messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ step: steps.length, result }) });
     }
   }
   return { steps, stopReason: 'max_steps' };

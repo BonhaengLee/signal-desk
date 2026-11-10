@@ -19,11 +19,18 @@ export interface ToolContext {
 
 export const SIM_METRICS = ['latency_p99', 'error_rate'];
 
+// deploy = 특정 배포가 원인(롤백하면 풀린다), degrade = 배포와 무관한 성능 저하(담당자를 부른다)
 export type RootCauseKind = 'deploy' | 'degrade';
-export interface Verdict {
+/** 원인 서비스와 종류. 채점과 기준선은 이것만 본다 */
+export interface Judgement {
   service: string;
   kind: RootCauseKind;
-  evidence: string;
+}
+/** 에이전트의 제출. 근거는 몇 번째 도구 호출 결과에서 나왔는지 번호로 가리켜 사람이 원본과 대조할 수 있게 한다 */
+export interface Verdict extends Judgement {
+  summary: string; // 왜 이 서비스인가, 한 문장
+  evidence: { step: number; fact: string }[]; // step = 1부터 센 도구 호출 번호
+  ruledOut: { service: string; why: string }[]; // 의심했다가 버린 후보
 }
 
 /** OpenAI 호환 tools 정의. 지표 이름과 요약 간격은 데이터마다 다르다 */
@@ -46,11 +53,21 @@ export function toolSpecsFor(ctx: Pick<ToolContext, 'metrics' | 'bucketSec' | 't
   fn('get_logs', '한 서비스의 warn·error 로그를 메시지별로 묶어 처음 나온 시각과 건수', {
     service: { type: 'string' },
   }, ['service']),
-  fn('submit_root_cause', '조사를 끝내고 근본 원인을 제출한다. 반드시 마지막에 한 번 호출', {
+  fn('submit_root_cause', '조사를 끝내고 근본 원인을 제출한다. 반드시 마지막에 한 번 호출. 글은 모두 한국어로', {
     service: { type: 'string', description: '원인 서비스' },
-    kind: { type: 'string', enum: ['deploy', 'degrade'], description: 'deploy=배포 탓, degrade=배포 없이 성능 저하' },
-    evidence: { type: 'string', description: '판단 근거 2~3개, T+초 포함' },
-  }, ['service', 'kind', 'evidence']),
+    kind: { type: 'string', enum: ['deploy', 'degrade'], description: 'deploy=특정 배포가 원인(롤백 대상), degrade=배포와 무관한 성능 저하' },
+    summary: { type: 'string', description: '왜 이 서비스가 원인인가 한 문장. 예: payment-db 지연이 먼저 오르고 위쪽 서비스가 뒤따라 올랐다' },
+    evidence: {
+      type: 'array',
+      description: '근거 1~4개. step 은 그 사실을 본 도구 결과의 step 번호, fact 는 T+초와 값을 넣은 한 줄',
+      items: { type: 'object', properties: { step: { type: 'integer' }, fact: { type: 'string' } }, required: ['step', 'fact'] },
+    },
+    ruledOut: {
+      type: 'array',
+      description: '의심했다가 버린 다른 서비스 1~3개와 버린 이유',
+      items: { type: 'object', properties: { service: { type: 'string' }, why: { type: 'string' } }, required: ['service', 'why'] },
+    },
+  }, ['service', 'kind', 'summary', 'evidence', 'ruledOut']),
   ].filter((t) => allowed.has(t.function.name));
 }
 
@@ -160,11 +177,46 @@ export function runTool(ctx: ToolContext, name: string, args: Record<string, unk
   }
 }
 
-/** submit_root_cause 인자 검증. 모델 출력은 신뢰 경계 밖이다 */
-export function parseVerdict(args: unknown, known: Set<string>): { ok: true; verdict: Verdict } | { ok: false; error: string } {
+/** submit_root_cause 인자 검증. 모델 출력은 신뢰 경계 밖이다.
+ *  prior = 이 제출 전까지의 도구 호출(1번부터). 근거 번호는 실제로 부른 조사 도구여야 한다 */
+export function parseVerdict(
+  args: unknown,
+  known: Set<string>,
+  prior: { tool: string }[],
+): { ok: true; verdict: Verdict } | { ok: false; error: string } {
   const a = (args ?? {}) as Record<string, unknown>;
-  if (typeof a.service !== 'string' || !known.has(a.service)) return { ok: false, error: `service 는 ${[...known].join(', ')} 중 하나` };
-  if (a.kind !== 'deploy' && a.kind !== 'degrade') return { ok: false, error: 'kind 는 deploy 또는 degrade' };
-  if (typeof a.evidence !== 'string' || a.evidence.trim() === '') return { ok: false, error: 'evidence 필요' };
-  return { ok: true, verdict: { service: a.service, kind: a.kind, evidence: a.evidence } };
+  const ko = (v: unknown, max: number) => typeof v === 'string' && HANGUL.test(v) && v.trim().length <= max;
+  // 틀린 칸을 한꺼번에 알려 준다. 하나씩 알려 주면 고칠 때마다 호출이 하나씩 든다
+  const errors = new Set<string>();
+  if (typeof a.service !== 'string' || !known.has(a.service)) errors.add(`service 는 ${[...known].join(', ')} 중 하나`);
+  if (a.kind !== 'deploy' && a.kind !== 'degrade') errors.add('kind 는 deploy 또는 degrade');
+  if (!ko(a.summary, 200)) errors.add('summary 는 한국어 한 문장 (200자 이하)');
+  const ev = a.evidence;
+  if (!Array.isArray(ev) || ev.length < 1 || ev.length > 4) errors.add('evidence 는 1~4개 배열');
+  else
+    for (const e of ev as Record<string, unknown>[]) {
+      const step = e?.step;
+      if (!Number.isInteger(step) || (step as number) < 1 || (step as number) > prior.length || prior[(step as number) - 1]!.tool === 'submit_root_cause')
+        errors.add(`evidence.step 은 이미 부른 조사 도구 번호 (1~${prior.length})`);
+      if (!ko(e?.fact, 200)) errors.add('evidence.fact 는 한국어 한 줄 (200자 이하)');
+    }
+  const ro = a.ruledOut;
+  if (!Array.isArray(ro) || ro.length < 1 || ro.length > 3) errors.add('ruledOut 은 버린 후보 1~3개 배열');
+  else
+    for (const r of ro as Record<string, unknown>[]) {
+      if (typeof r?.service !== 'string' || !known.has(r.service) || r.service === a.service) errors.add('ruledOut.service 는 원인이 아닌 다른 서비스');
+      if (!ko(r?.why, 200)) errors.add('ruledOut.why 는 한국어 한 줄 (200자 이하)');
+    }
+  if (errors.size > 0) return { ok: false, error: [...errors].join(' / ') };
+  return {
+    ok: true,
+    verdict: {
+      service: a.service as string,
+      kind: a.kind as RootCauseKind,
+      summary: (a.summary as string).trim(),
+      evidence: (ev as { step: number; fact: string }[]).map((e) => ({ step: e.step, fact: e.fact.trim() })),
+      ruledOut: (ro as { service: string; why: string }[]).map((r) => ({ service: r.service, why: r.why.trim() })),
+    },
+  };
 }
+const HANGUL = /[가-힣]/;

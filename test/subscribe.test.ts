@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { backoffDelay, subscribe, type SubscribeStatus } from '../src/client/subscribe.ts';
+import { backoffDelay, order, subscribe, type SubscribeStatus } from '../src/client/subscribe.ts';
 import { ANCHOR_MS, createSseServer } from '../src/server/sse.ts';
 import type { SseMessage } from '../src/client/sse.ts';
 
@@ -134,4 +134,8 @@ test('하트비트조차 오지 않는 연결은 끊고 다시 붙는다 (프록
   await new Promise<void>((r) => server.close(() => r()));
   assert.deepEqual(got, ['first', 'second']);
   assert.equal(requests, 2);
+});
+
+test('조사 스트림처럼 id 가 숫자 하나여도 이어 받기와 중복 거르기가 된다', () => {
+  assert.deepEqual(['0:7', '12', 'abc', undefined].map(order), [[0, 7], [0, 12], undefined, undefined]);
 });

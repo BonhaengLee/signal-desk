@@ -9,8 +9,8 @@
     "baselineOk": true,
     "firstAlert": "payment-api/deploy",
     "firstAlertOk": true,
-    "steps": 7,
-    "ms": 19208
+    "steps": 9,
+    "ms": 30344
   },
   {
     "scenario": "deploy-regression",
@@ -23,7 +23,7 @@
     "firstAlert": "payment-api/deploy",
     "firstAlertOk": true,
     "steps": 8,
-    "ms": 24739
+    "ms": 30118
   },
   {
     "scenario": "deploy-regression",
@@ -36,7 +36,7 @@
     "firstAlert": "payment-api/deploy",
     "firstAlertOk": true,
     "steps": 7,
-    "ms": 18390
+    "ms": 25824
   },
   {
     "scenario": "deploy-regression",
@@ -48,8 +48,8 @@
     "baselineOk": true,
     "firstAlert": "payment-api/deploy",
     "firstAlertOk": true,
-    "steps": 7,
-    "ms": 27691
+    "steps": 9,
+    "ms": 27735
   },
   {
     "scenario": "deploy-regression",
@@ -61,8 +61,8 @@
     "baselineOk": true,
     "firstAlert": "payment-api/deploy",
     "firstAlertOk": true,
-    "steps": 8,
-    "ms": 40355
+    "steps": 9,
+    "ms": 24710
   },
   {
     "scenario": "db-degradation",
@@ -74,129 +74,168 @@
     "baselineOk": false,
     "firstAlert": "payment-db/degrade",
     "firstAlertOk": true,
-    "steps": 8,
-    "ms": 43274
+    "steps": 7,
+    "ms": 23420
   },
   {
     "scenario": "db-degradation",
+    "seed": 2,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "checkout-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 9,
+    "ms": 42057
+  },
+  {
+    "scenario": "db-degradation",
+    "seed": 3,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "checkout-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 10,
+    "ms": 58534
+  },
+  {
+    "scenario": "db-degradation",
+    "seed": 4,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "checkout-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 10,
+    "ms": 48495
+  },
+  {
+    "scenario": "db-degradation",
+    "seed": 5,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "checkout-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 9,
+    "ms": 55265
+  },
+  {
+    "scenario": "retry-storm",
+    "seed": 1,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "payment-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 8,
+    "ms": 16753
+  },
+  {
+    "scenario": "retry-storm",
+    "seed": 2,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "payment-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 10,
+    "ms": 73312
+  },
+  {
+    "scenario": "retry-storm",
+    "seed": 3,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "payment-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 6,
+    "ms": 16806
+  },
+  {
+    "scenario": "retry-storm",
+    "seed": 4,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "payment-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 6,
+    "ms": 21146
+  },
+  {
+    "scenario": "retry-storm",
+    "seed": 5,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "payment-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-db/degrade",
+    "firstAlertOk": true,
+    "steps": 8,
+    "ms": 48136
+  },
+  {
+    "scenario": "silent-db",
+    "seed": 1,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "checkout-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-api/degrade",
+    "firstAlertOk": false,
+    "steps": 9,
+    "ms": 66885
+  },
+  {
+    "scenario": "silent-db",
     "seed": 2,
     "agent": "payment-api/degrade",
     "agentOk": false,
     "measured": true,
     "baseline": "checkout-api/deploy",
     "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 8,
-    "ms": 33446
-  },
-  {
-    "scenario": "db-degradation",
-    "seed": 3,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "checkout-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 7,
-    "ms": 17867
-  },
-  {
-    "scenario": "db-degradation",
-    "seed": 4,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "checkout-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 8,
-    "ms": 36640
-  },
-  {
-    "scenario": "db-degradation",
-    "seed": 5,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "checkout-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 8,
-    "ms": 36836
-  },
-  {
-    "scenario": "retry-storm",
-    "seed": 1,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "payment-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 7,
-    "ms": 18268
-  },
-  {
-    "scenario": "retry-storm",
-    "seed": 2,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "payment-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 6,
-    "ms": 44213
-  },
-  {
-    "scenario": "retry-storm",
-    "seed": 3,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "payment-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 6,
-    "ms": 13742
-  },
-  {
-    "scenario": "retry-storm",
-    "seed": 4,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "payment-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 6,
-    "ms": 12518
-  },
-  {
-    "scenario": "retry-storm",
-    "seed": 5,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "payment-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-db/degrade",
-    "firstAlertOk": true,
-    "steps": 8,
-    "ms": 20898
+    "firstAlert": "payment-api/degrade",
+    "firstAlertOk": false,
+    "steps": 9,
+    "ms": 61364
   },
   {
     "scenario": "silent-db",
-    "seed": 1,
+    "seed": 3,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
+    "measured": true,
+    "baseline": "checkout-api/deploy",
+    "baselineOk": false,
+    "firstAlert": "payment-api/degrade",
+    "firstAlertOk": false,
+    "steps": 9,
+    "ms": 50195
+  },
+  {
+    "scenario": "silent-db",
+    "seed": 4,
     "agent": "payment-api/degrade",
     "agentOk": false,
     "measured": true,
@@ -204,60 +243,21 @@
     "baselineOk": false,
     "firstAlert": "payment-api/degrade",
     "firstAlertOk": false,
-    "steps": 7,
-    "ms": 35688
-  },
-  {
-    "scenario": "silent-db",
-    "seed": 2,
-    "agent": "payment-api/degrade",
-    "agentOk": false,
-    "measured": true,
-    "baseline": "checkout-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-api/degrade",
-    "firstAlertOk": false,
-    "steps": 7,
-    "ms": 26027
-  },
-  {
-    "scenario": "silent-db",
-    "seed": 3,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "checkout-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-api/degrade",
-    "firstAlertOk": false,
     "steps": 8,
-    "ms": 36605
-  },
-  {
-    "scenario": "silent-db",
-    "seed": 4,
-    "agent": "payment-db/degrade",
-    "agentOk": true,
-    "measured": true,
-    "baseline": "checkout-api/deploy",
-    "baselineOk": false,
-    "firstAlert": "payment-api/degrade",
-    "firstAlertOk": false,
-    "steps": 8,
-    "ms": 30158
+    "ms": 31466
   },
   {
     "scenario": "silent-db",
     "seed": 5,
-    "agent": "checkout-api/deploy",
-    "agentOk": false,
+    "agent": "payment-db/degrade",
+    "agentOk": true,
     "measured": true,
     "baseline": "checkout-api/deploy",
     "baselineOk": false,
     "firstAlert": "payment-api/degrade",
     "firstAlertOk": false,
-    "steps": 6,
-    "ms": 14282
+    "steps": 8,
+    "ms": 34113
   },
   {
     "scenario": "hidden-deploy",
@@ -269,8 +269,8 @@
     "baselineOk": true,
     "firstAlert": "checkout-api/degrade",
     "firstAlertOk": false,
-    "steps": 8,
-    "ms": 38826
+    "steps": 9,
+    "ms": 35363
   },
   {
     "scenario": "hidden-deploy",
@@ -282,8 +282,8 @@
     "baselineOk": true,
     "firstAlert": "checkout-api/degrade",
     "firstAlertOk": false,
-    "steps": 7,
-    "ms": 19615
+    "steps": 8,
+    "ms": 25692
   },
   {
     "scenario": "hidden-deploy",
@@ -295,8 +295,8 @@
     "baselineOk": true,
     "firstAlert": "checkout-api/degrade",
     "firstAlertOk": false,
-    "steps": 8,
-    "ms": 19020
+    "steps": 9,
+    "ms": 54883
   },
   {
     "scenario": "hidden-deploy",
@@ -308,8 +308,8 @@
     "baselineOk": true,
     "firstAlert": "checkout-api/degrade",
     "firstAlertOk": false,
-    "steps": 7,
-    "ms": 27650
+    "steps": 8,
+    "ms": 34344
   },
   {
     "scenario": "hidden-deploy",
@@ -322,6 +322,6 @@
     "firstAlert": "checkout-api/degrade",
     "firstAlertOk": false,
     "steps": 8,
-    "ms": 24287
+    "ms": 27134
   }
 ]
