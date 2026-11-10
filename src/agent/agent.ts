@@ -1,7 +1,7 @@
 // 조사 에이전트 루프. 모델이 도구를 부르면 실행해 결과를 대화에 붙이고, submit_root_cause 가 나오면 끝낸다.
 // Chat Completions 는 상태가 없어서 매 턴 대화 전체를 다시 보낸다
 
-import { parseVerdict, runTool, TOOL_SPECS, type ToolContext, type Verdict } from './tools.ts';
+import { parseVerdict, runTool, toolSpecsFor, type ToolContext, type ToolSpec, type Verdict } from './tools.ts';
 
 export interface ToolCall {
   id: string;
@@ -14,7 +14,7 @@ export interface ChatMessage {
   tool_call_id?: string;
 }
 /** 모델 한 번 호출. 테스트에서는 각본대로 답하는 가짜로 바꾼다 */
-export type ChatFn = (messages: ChatMessage[], tools: typeof TOOL_SPECS) => Promise<ChatMessage>;
+export type ChatFn = (messages: ChatMessage[], tools: ToolSpec[]) => Promise<ChatMessage>;
 
 export interface Step {
   tool: string;
@@ -39,6 +39,7 @@ const SYSTEM = `장애 조사 에이전트다. 도구로 증거를 모아 근본
 
 export async function investigate(ctx: ToolContext, chat: ChatFn, { maxSteps = 10, onStep }: InvestigateOptions = {}): Promise<InvestigateResult> {
   const known = new Set(ctx.topology.services.map((s) => s.name));
+  const specs = toolSpecsFor(ctx);
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM },
     { role: 'user', content: `${ctx.topology.entry} 응답 지연 장애. 원인을 조사해.` },
@@ -47,7 +48,7 @@ export async function investigate(ctx: ToolContext, chat: ChatFn, { maxSteps = 1
   let nudged = false;
 
   for (let turn = 0; turn < maxSteps; turn++) {
-    const reply = await chat(messages, TOOL_SPECS);
+    const reply = await chat(messages, specs);
     messages.push(reply);
     const calls = reply.tool_calls ?? [];
     if (calls.length === 0) {

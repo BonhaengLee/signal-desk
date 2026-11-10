@@ -12,7 +12,12 @@ export interface ToolContext {
   events: SignalEvent[];
   topology: Topology;
   startMs: number; // 시나리오 0초. 시각은 T+초로만 보여 준다
+  metrics?: string[]; // get_metric 이 받는 지표 이름. 없으면 시뮬레이터 지표
+  bucketSec?: number; // get_metric 요약 간격. 기본 10초
+  tools?: string[]; // 이 데이터에서 쓸 수 있는 도구. 없으면 시뮬레이터 기본 도구 전부. 데이터에 없는 정보(배포·로그)의 도구는 빼서 헛걸음을 막는다
 }
+
+export const SIM_METRICS = ['latency_p99', 'error_rate'];
 
 export type RootCauseKind = 'deploy' | 'degrade';
 export interface Verdict {
@@ -21,15 +26,22 @@ export interface Verdict {
   evidence: string;
 }
 
-/** OpenAI 호환 tools 정의 */
-export const TOOL_SPECS = [
+/** OpenAI 호환 tools 정의. 지표 이름과 요약 간격은 데이터마다 다르다 */
+export const SIM_TOOLS = ['get_topology', 'list_alerts', 'list_deploys', 'get_metric', 'get_logs', 'submit_root_cause'];
+
+export function toolSpecsFor(ctx: Pick<ToolContext, 'metrics' | 'bucketSec' | 'tools'> = {}) {
+  const allowed = new Set(ctx.tools ?? SIM_TOOLS);
+  return [
   fn('get_topology', '서비스 목록과 호출 관계(누가 누구를 부르는가)', {}),
   fn('list_alerts', '울렸거나 해소된 경보 전체 (T+초 순)', {}),
   fn('list_deploys', '배포 이력 전체 (T+초 순)', {}),
-  fn('get_metric', '한 서비스의 지표를 10초 간격으로 요약', {
+  fn('get_metric', `한 서비스의 지표를 ${ctx.bucketSec ?? 10}초 간격 구간 최댓값으로 요약`, {
     service: { type: 'string' },
-    name: { type: 'string', enum: ['latency_p99', 'error_rate'] },
+    name: { type: 'string', enum: ctx.metrics ?? SIM_METRICS },
   }, ['service', 'name']),
+  fn('get_service_metrics', `한 서비스의 지표 전부(${(ctx.metrics ?? SIM_METRICS).join('·')})를 ${ctx.bucketSec ?? 10}초 간격 구간 최댓값으로 한 번에 요약. 서비스별 대시보드 한 장`, {
+    service: { type: 'string' },
+  }, ['service']),
   fn('get_logs', '한 서비스의 warn·error 로그를 메시지별로 묶어 처음 나온 시각과 건수', {
     service: { type: 'string' },
   }, ['service']),
@@ -38,7 +50,11 @@ export const TOOL_SPECS = [
     kind: { type: 'string', enum: ['deploy', 'degrade'], description: 'deploy=배포 탓, degrade=배포 없이 성능 저하' },
     evidence: { type: 'string', description: '판단 근거 2~3개, T+초 포함' },
   }, ['service', 'kind', 'evidence']),
-] as const;
+  ].filter((t) => allowed.has(t.function.name));
+}
+
+export type ToolSpec = ReturnType<typeof fn>;
+export const TOOL_SPECS = toolSpecsFor();
 
 function fn(name: string, description: string, properties: Record<string, unknown>, required: string[] = []) {
   return { type: 'function', function: { name, description, parameters: { type: 'object', properties, required } } };
@@ -46,10 +62,26 @@ function fn(name: string, description: string, properties: Record<string, unknow
 
 const tsec = (ctx: ToolContext, e: SignalEvent) => Math.round((e.at.getTime() - ctx.startMs) / 1000);
 
+// 10 이상은 소수 첫째 자리, 그 아래는 유효숫자 3자리 (초 단위 지연 0.012 같은 값이 0 으로 뭉개지지 않게)
+const round = (v: number) => (Math.abs(v) >= 10 ? Math.round(v * 10) / 10 : Number(v.toPrecision(3)));
+
+/** 한 서비스·지표를 bucketSec 구간 최댓값으로 묶는다. 키 = 구간 시작 T+초 */
+function bucketMax(ctx: ToolContext, service: string, metric: string): Map<number, number> {
+  const step = ctx.bucketSec ?? 10;
+  const buckets = new Map<number, number>();
+  for (const e of ctx.events) {
+    if (e.type !== 'metric' || e.service !== service || e.payload.name !== metric) continue;
+    const b = Math.floor(tsec(ctx, e) / step) * step;
+    buckets.set(b, Math.max(buckets.get(b) ?? -Infinity, e.payload.value));
+  }
+  return buckets;
+}
+
 /** 도구 실행. 잘못된 인자는 예외 대신 오류 문자열로 돌려줘서 모델이 고칠 기회를 준다 */
 export function runTool(ctx: ToolContext, name: string, args: Record<string, unknown>): unknown {
   const known = new Set(ctx.topology.services.map((s) => s.name));
   const svc = typeof args.service === 'string' ? args.service : '';
+  if (!(ctx.tools ?? SIM_TOOLS).includes(name)) return { error: `모르는 도구: ${name}` };
   switch (name) {
     case 'get_topology':
       return ctx.topology;
@@ -63,13 +95,19 @@ export function runTool(ctx: ToolContext, name: string, args: Record<string, unk
       );
     case 'get_metric': {
       if (!known.has(svc)) return { error: `모르는 서비스: ${svc}` };
-      const buckets = new Map<number, number>();
-      for (const e of ctx.events) {
-        if (e.type !== 'metric' || e.service !== svc || e.payload.name !== args.name) continue;
-        const b = Math.floor(tsec(ctx, e) / 10) * 10;
-        buckets.set(b, Math.max(buckets.get(b) ?? 0, e.payload.value)); // 구간 최댓값
+      return [...bucketMax(ctx, svc, String(args.name))].map(([t, max]) => ({ t, max: round(max) }));
+    }
+    case 'get_service_metrics': {
+      if (!known.has(svc)) return { error: `모르는 서비스: ${svc}` };
+      // 시각 열 하나 + 지표마다 값 열 하나. 객체 배열보다 토큰이 훨씬 적다
+      const out: Record<string, number[]> = {};
+      for (const m of ctx.metrics ?? SIM_METRICS) {
+        const b = bucketMax(ctx, svc, m);
+        if (b.size === 0) continue;
+        out.t ??= [...b.keys()];
+        out[m] = out.t.map((t) => round(b.get(t) ?? NaN));
       }
-      return [...buckets].map(([t, max]) => ({ t, max: Math.round(max * 10) / 10 }));
+      return out;
     }
     case 'get_logs': {
       if (!known.has(svc)) return { error: `모르는 서비스: ${svc}` };
