@@ -18,7 +18,7 @@ import {
   type Point,
   type Severity,
 } from './derive.ts';
-import { Badge, Card, ChipGroup, EmptyState, Segmented, Select, Switch, VisuallyHidden, type Tone } from './ui/controls.tsx';
+import { Badge, Button, Card, ChipGroup, EmptyState, Segmented, Select, Switch, VisuallyHidden, type Tone } from './ui/controls.tsx';
 import { applyView, parseView, type ViewOptions } from './urlState.ts';
 // 시나리오 파일에서는 이름·시작 시각·길이만 가져온다. 시각 표기를 "시나리오 경과 시간" 으로 바꾸고 차트 x 축을 고정하는 데 쓴다.
 // 파일 전체를 가져오면 정답(rootCause)과 원인을 적은 설명(description)이 화면 번들에 들어가, 화면을 읽는 사람과 에이전트가 답을 보게 된다.
@@ -48,6 +48,13 @@ const STATUS: Record<StreamStatus, { label: string; tone: Tone; pulse: boolean; 
   open: { label: DEMO ? '재생 중' : '실시간', tone: 'ok', pulse: true, help: DEMO ? '미리 만든 이벤트를 배속에 맞춰 재생하는 중입니다' : 'SSE 로 이벤트를 받는 중입니다' },
   closed: { label: '연결 종료', tone: 'neutral', pulse: false, help: '서버가 스트림을 닫았습니다' },
   error: { label: '연결 실패', tone: 'error', pulse: false, help: 'SSE 서버에 연결하지 못했습니다' },
+};
+// 연결이 정상일 때만 이 표시로 덮는다. 끊김·실패는 멈춰 있어도 그대로 보여야 한다
+const PAUSED: (typeof STATUS)[StreamStatus] = {
+  label: '일시정지',
+  tone: 'neutral',
+  pulse: false,
+  help: '화면을 멈췄습니다. 그동안 온 이벤트는 재생을 누르면 한꺼번에 반영합니다',
 };
 
 const ERROR_RATE_HIGHLIGHT = 5; // %
@@ -79,7 +86,17 @@ export function App() {
     if ((qs ? `?${qs}` : '') === location.search) return;
     history.replaceState(history.state, '', `${location.pathname}${qs ? `?${qs}` : ''}${location.hash}`);
   }, [scenarioName, speed, hideMetrics, severities, hiddenServices, hiddenLines]);
-  const { events, status, rejected } = useSignalStream(`/events?scenario=${scenarioName}&seed=42&speed=${speed}`);
+  const streamUrl = `/events?scenario=${scenarioName}&seed=42&speed=${speed}`;
+  // 멈춤은 그 스트림에 묶는다. 시나리오·배속을 바꾸면 새 스트림이라 저절로 풀린다. 주소에는 남기지 않는다 (링크로 연 화면이 멈춰 있으면 안 된다)
+  const [pausedFor, setPausedFor] = useState<string | null>(null);
+  const paused = pausedFor === streamUrl;
+  const { events, status, rejected, pending } = useSignalStream(streamUrl, paused);
+  /** 조사를 누른 순간 화면을 멈춰 결론과 차트가 같은 시점을 보게 한다. 시작에 실패하면 돌려준 함수로 되돌린다. 이미 멈춰 있었으면 그대로 둔다 */
+  const holdPlayback = () => {
+    if (paused) return () => {};
+    setPausedFor(streamUrl);
+    return () => setPausedFor((p) => (p === streamUrl ? null : p));
+  };
 
   const scenario = SCENARIOS.find((sc) => sc.name === scenarioName)!;
   const origin = Date.parse(scenario.startAt);
@@ -126,7 +143,7 @@ export function App() {
     setSeverities(new Set(SEVERITIES));
     setHiddenServices(new Set());
   };
-  const st = STATUS[status];
+  const st = paused && status === 'open' ? PAUSED : STATUS[status];
   const waiting = events.length === 0;
   // error 를 위로, 같은 등급이면 최근에 울린 것을 위로
   const alerts = [...firing.values()].reverse().sort((a, b) => (a.payload.level === b.payload.level ? 0 : a.payload.level === 'error' ? -1 : 1));
@@ -146,6 +163,11 @@ export function App() {
         <div className="topbar-controls">
           <Select label="시나리오" value={scenarioName} options={SCENARIO_OPTIONS} onChange={setScenarioName} />
           <Segmented label="배속" value={speed} options={SPEEDS} onChange={setSpeed} />
+          {/* 재생 조작은 왼쪽 묶음에 둔다. 오른쪽 묶음은 오른쪽 정렬이라 '· 대기 N' 이 붙으면 통째로 밀려 버튼이 커서 밑에서 빠진다 */}
+          <Button variant="secondary" onClick={() => setPausedFor(paused ? null : streamUrl)}>
+            {paused ? <PlayIcon /> : <PauseIcon />}
+            {paused ? '재생' : '일시정지'}
+          </Button>
         </div>
         <div className="topbar-status">
           <Progress now={timeline.now} total={scenario.durationSec} />
@@ -159,6 +181,7 @@ export function App() {
           <span className="count">
             이벤트 <b>{events.length.toLocaleString()}</b>
             {rejected > 0 && <span className="rejected"> · 거절 {rejected}</span>}
+            {paused && pending > 0 && <span title="재생을 누르면 반영합니다"> · 대기 {pending.toLocaleString()}</span>}
           </span>
         </div>
       </header>
@@ -337,7 +360,7 @@ export function App() {
             )}
           </div>
         </Card>
-        <InvestigationPanel scenario={scenarioName} nowSec={timeline.now} alerted={timeline.spans.length > 0} />
+        <InvestigationPanel scenario={scenarioName} nowSec={timeline.now} alerted={timeline.spans.length > 0} onStart={holdPlayback} />
       </main>
     </div>
   );
@@ -474,6 +497,23 @@ function CheckIcon() {
     <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
       <circle cx="10" cy="10" r="9" fill="var(--color-ok-bg)" stroke="var(--color-ok-border)" />
       <path d="M6.5 10.2 8.8 12.5 13.5 7.5" fill="none" stroke="var(--color-ok)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <rect x="2.5" y="2" width="2.5" height="8" rx="0.5" fill="currentColor" />
+      <rect x="7" y="2" width="2.5" height="8" rx="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M3 2.2v7.6a.5.5 0 0 0 .76.43l6.1-3.8a.5.5 0 0 0 0-.86l-6.1-3.8A.5.5 0 0 0 3 2.2Z" fill="currentColor" />
     </svg>
   );
 }

@@ -1,7 +1,7 @@
 // 화면에서 쓰는 기본 컴포넌트. 동작·키보드·스크린 리더 처리는 Radix Primitives(ADR-0003)에 맡기고 모양만 입힌다.
 // 상태 표시는 Radix 가 붙이는 data-state 값을 CSS 에서 읽는다. 키보드 포커스 링은 CSS :focus-visible 로 그린다.
 
-import { useId, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useId, useRef, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from 'react';
 import * as RSelect from '@radix-ui/react-select';
 import * as RSwitch from '@radix-ui/react-switch';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
@@ -179,6 +179,18 @@ export function Switch({ children, isSelected, onChange }: { children: ReactNode
 }
 
 /* ── 뱃지 ───────────────────────────────────────────── */
+
+/* ── 버튼 ───────────────────────────────────────────── */
+
+/** primary: 그 영역의 주 동작 하나. secondary: 보조·되돌리기. danger: 되돌릴 수 없는 거절. type 기본값은 "button" 이라 폼 안에서 제출하려면 "submit" 을 넘긴다 */
+export function Button({
+  variant,
+  type = 'button',
+  className,
+  ...rest
+}: ComponentPropsWithoutRef<'button'> & { variant: 'primary' | 'secondary' | 'danger' }) {
+  return <button type={type} className={`${s.button} ${s[variant]} ${className ?? ''}`} {...rest} />;
+}
 
 export type Tone = 'error' | 'warn' | 'ok' | 'info' | 'deploy' | 'neutral';
 

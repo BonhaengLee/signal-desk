@@ -8,7 +8,7 @@ import { formatCall, formatResult, previewResult, type InvestigationView } from 
 import { formatElapsed } from './derive.ts';
 import { ApiError, decideProposal, startInvestigation, useInvestigation } from './useInvestigation.ts';
 import { DEMO } from './demo.ts';
-import { Badge, Card, EmptyState, VisuallyHidden, type Tone } from './ui/controls.tsx';
+import { Badge, Button, Card, EmptyState, VisuallyHidden, type Tone } from './ui/controls.tsx';
 import s from './Investigation.module.css';
 
 const SEED = 42; // 화면 스트림(/events)과 같은 시드. 에이전트가 화면과 같은 사건을 조사한다
@@ -48,8 +48,19 @@ function writeInv(id: string | undefined) {
 /**
  * scenario: 화면이 재생 중인 시나리오. nowSec: 지금 재생 위치(시나리오 경과 초). alerted: 이번 재생에서 경보가 한 번이라도 울렸는가.
  * 조사는 nowSec 까지의 기록만 본다. 경보가 울리기 전에는 조사할 대상이 없어 버튼을 끈다
+ * onStart: 누르는 순간 부른다(화면 재생을 멈춤). 시작에 실패하면 돌려받은 함수를 불러 되돌린다
  */
-export function InvestigationPanel({ scenario, nowSec, alerted }: { scenario: string; nowSec: number; alerted: boolean }) {
+export function InvestigationPanel({
+  scenario,
+  nowSec,
+  alerted,
+  onStart,
+}: {
+  scenario: string;
+  nowSec: number;
+  alerted: boolean;
+  onStart: () => () => void;
+}) {
   const [id, setId] = useState(readInv);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
@@ -58,11 +69,14 @@ export function InvestigationPanel({ scenario, nowSec, alerted }: { scenario: st
   useEffect(() => writeInv(id), [id]);
 
   const start = async () => {
+    const atSec = Math.floor(nowSec);
+    const undo = onStart();
     setStarting(true);
     setError(undefined);
     try {
-      setId(await startInvestigation(scenario, SEED, Math.floor(nowSec)));
+      setId(await startInvestigation(scenario, SEED, atSec));
     } catch (e) {
+      undo();
       setError(
         e instanceof ApiError && e.status === 404 && !DEMO
           ? '조사 API 가 꺼져 있습니다. .env.local 에 LLM 키를 넣고 서버를 다시 켜세요'
@@ -86,15 +100,14 @@ export function InvestigationPanel({ scenario, nowSec, alerted }: { scenario: st
       // 시나리오 이름은 상단 선택 상자에 있다. 지금 화면과 다른 시나리오를 조사한 기록일 때만 붙인다
       meta={view && `${view.scenario && view.scenario !== scenario ? `${view.scenario} · ` : ''}${view.atSec === undefined ? '전체 기록' : `${formatElapsed(view.atSec)} 까지의 기록`}`}
       actions={
-        <button
-          type="button"
-          className={s.primary}
+        <Button
+          variant="primary"
           onClick={start}
           disabled={starting || !alerted}
-          title={alerted ? `${formatElapsed(Math.floor(nowSec))} 까지의 기록으로 조사합니다` : '경보가 울리면 조사할 수 있습니다'}
+          title={alerted ? `${formatElapsed(Math.floor(nowSec))} 까지의 기록으로 조사합니다. 화면 재생도 이 시점에서 멈춥니다` : '경보가 울리면 조사할 수 있습니다'}
         >
           {starting ? '시작하는 중…' : id ? '다시 조사' : '지금 시점까지 조사'}
-        </button>
+        </Button>
       }
       className={`${s.card} area-inv`}
       bodyClassName={s.body}
@@ -319,21 +332,21 @@ function ProposalBox({ proposal }: { proposal: NonNullable<InvestigationView['pr
       <div className={s.buttons}>
         {rejecting ? (
           <>
-            <button type="submit" className={s.danger} disabled={sending || !operatorOk || !reason.trim()}>
+            <Button type="submit" variant="danger" disabled={sending || !operatorOk || !reason.trim()}>
               거절 확정
-            </button>
-            <button type="button" className={s.secondary} onClick={() => setRejecting(false)}>
+            </Button>
+            <Button variant="secondary" onClick={() => setRejecting(false)}>
               취소
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <button type="submit" className={s.primary} disabled={sending || !operatorOk}>
+            <Button type="submit" variant="primary" disabled={sending || !operatorOk}>
               승인: {actionText(proposal.action)}
-            </button>
-            <button type="button" className={s.secondary} onClick={() => setRejecting(true)} disabled={sending}>
+            </Button>
+            <Button variant="secondary" onClick={() => setRejecting(true)} disabled={sending}>
               거절
-            </button>
+            </Button>
           </>
         )}
         {!operatorOk && <VisuallyHidden>결정하는 사람 이름을 넣어야 버튼이 켜집니다</VisuallyHidden>}

@@ -223,43 +223,6 @@ a.stepRef:focus-visible {
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.primary,
-.secondary,
-.danger {
-  padding: var(--space-1) var(--space-3);
-  font: inherit;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-.primary {
-  color: var(--color-surface);
-  background: var(--color-accent);
-}
-.secondary {
-  color: var(--color-text);
-  background: var(--color-surface);
-  border-color: var(--color-border-strong);
-}
-.danger {
-  color: var(--color-surface);
-  background: var(--color-error-fg);
-}
-.primary:focus-visible,
-.secondary:focus-visible,
-.danger:focus-visible {
-  outline: 2px solid transparent;
-  box-shadow: var(--focus-ring);
-}
-.primary:disabled,
-.secondary:disabled,
-.danger:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .error {
   margin: 0;
   padding: var(--space-2) var(--space-3);
@@ -270,11 +233,8 @@ a.stepRef:focus-visible {
   border-radius: var(--radius-md);
 }
 
-/* 카드 머리: 열이 좁아도 제목·버튼은 한 줄, 시나리오 이름은 말줄임 */
-.card > header h2,
-.primary,
-.secondary,
-.danger {
+/* 카드 머리: 열이 좁아도 제목은 한 줄, 시나리오 이름은 말줄임. 버튼 줄바꿈 금지는 공용 Button 이 맡는다 */
+.card > header h2 {
   white-space: nowrap;
 }
 .card > header > span {
