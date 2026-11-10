@@ -62,7 +62,20 @@ export function Timeline({ data, durationSec, tickSec, colors, hidden }: Props) 
   const yTicks: number[] = [];
   for (let v = 0; v <= yMax + 1e-9; v += yStep) yTicks.push(v);
 
-  const deployLabels = useMemo(() => layoutDeployLabels(data.deploys, x, plotW), [data.deploys, plotW, durationSec]);
+  // 이름표 폭은 그려진 글자 폭을 재서 쓴다. 고정폭 글꼴도 대체 글꼴(SF Mono·Menlo·Consolas)마다 폭이 달라 어림하면 글자가 테두리 밖으로 나간다
+  const labelsRef = useRef<SVGGElement>(null);
+  const [textW, setTextW] = useState<ReadonlyMap<string, number>>(new Map());
+  useLayoutEffect(() => {
+    const g = labelsRef.current;
+    if (!g) return;
+    let next: Map<string, number> | undefined;
+    for (const t of g.querySelectorAll<SVGTextElement>('text[data-label]')) {
+      const w = Math.ceil(t.getComputedTextLength());
+      if (w > 0 && textW.get(t.dataset.label!) !== w) (next ??= new Map(textW)).set(t.dataset.label!, w);
+    }
+    if (next) setTextW(next);
+  });
+  const deployLabels = useMemo(() => layoutDeployLabels(data.deploys, x, plotW, textW), [data.deploys, plotW, durationSec, textW]);
 
   // 커서는 실제 지표가 있는 시점에 붙인다
   const cursorT = cursor === null ? null : Math.min(cursor, data.now);
@@ -163,17 +176,19 @@ export function Timeline({ data, durationSec, tickSec, colors, hidden }: Props) 
           })}
 
           {/* 배포 세로선과 이름표 */}
+          <g ref={labelsRef}>
           {deployLabels.map((d, i) => (
             <g key={i}>
               <line x1={x(d.t)} x2={x(d.t)} y1={d.row * LABEL_ROW_H + 14} y2={lanesTop + laneServices.length * LANE_H} className={s.deployLine} />
               <g transform={`translate(${d.labelX}, ${d.row * LABEL_ROW_H + 2})`}>
                 <rect width={d.w} height={13} rx={3} className={s.deployPill} />
-                <text x={6} y={9.5} className={s.deployText}>
+                <text x={6} y={9.5} className={s.deployText} data-label={d.label}>
                   <tspan className={s.deployVersion}>{d.version}</tspan> {d.service}
                 </text>
               </g>
             </g>
           ))}
+          </g>
 
           {/* 서비스별 경보 띠 */}
           {laneServices.map((sv, i) => {
@@ -274,16 +289,18 @@ function thresholdLines(spans: readonly AlertSpan[]) {
 }
 
 /** 배포 이름표가 겹치면 아랫줄로 내린다 (두 줄까지, 그 다음은 다시 윗줄) */
-function layoutDeployLabels(deploys: TimelineData['deploys'], x: (t: number) => number, plotW: number) {
+function layoutDeployLabels(deploys: TimelineData['deploys'], x: (t: number) => number, plotW: number, textW: ReadonlyMap<string, number>) {
   const rowEnd = [-Infinity, -Infinity];
   return deploys.map((d) => {
-    const w = (d.version.length + d.service.length + 1) * 5.6 + 12;
+    const label = `${d.version} ${d.service}`;
+    // 재기 전(첫 그림)에는 10px 고정폭 글자를 6.2px 로 어림한다. SF Mono 실측 6.18px
+    const w = (textW.get(label) ?? label.length * 6.2) + 12;
     let labelX = x(d.t) - 4;
     labelX = Math.min(labelX, M.left + plotW + M.right - w - 2);
     let row = rowEnd.findIndex((end) => labelX > end + 4);
     if (row === -1) row = rowEnd[0]! <= rowEnd[1]! ? 0 : 1;
     rowEnd[row] = labelX + w;
-    return { ...d, w, labelX, row };
+    return { ...d, label, w, labelX, row };
   });
 }
 
