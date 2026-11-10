@@ -7,11 +7,13 @@ import { flushSync } from 'react-dom';
 import { simulate, type Scenario } from '../simulator/simulate.ts';
 import type { SignalEvent } from '../events/schema.ts';
 import { EventList } from './EventList.tsx';
-import deployRegression from '../../scenarios/deploy-regression.json';
-import dbDegradation from '../../scenarios/db-degradation.json';
-import retryStorm from '../../scenarios/retry-storm.json';
+// 시나리오 전체(정답 포함)가 필요하다. ?raw 로 따로 읽어 본 화면(App)이 가져오는 JSON 모듈과 섞이지 않게 한다.
+// 같은 JSON 모듈을 함께 쓰면 공유 모듈이 본 화면 청크로 올라가 정답이 본 화면 번들에 들어간다
+import deployRegression from '../../scenarios/deploy-regression.json?raw';
+import dbDegradation from '../../scenarios/db-degradation.json?raw';
+import retryStorm from '../../scenarios/retry-storm.json?raw';
 
-const SCENARIOS = [deployRegression, dbDegradation, retryStorm] as unknown as Scenario[];
+const SCENARIOS = [deployRegression, dbDegradation, retryStorm].map((raw) => JSON.parse(raw) as Scenario);
 const REPEAT = 5;
 const APPENDS = 30;
 
