@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// 다른 포트의 서버에 붙여 볼 때: SSE_SERVER=http://localhost:4101 npx vite --port 5181
-const SSE_SERVER = process.env.SSE_SERVER ?? 'http://localhost:4100';
+// 다른 포트의 서버에 붙여 볼 때: SSE_SERVER=http://127.0.0.1:4101 npx vite --port 5181
+// 서버는 127.0.0.1 에만 연다(main.ts). localhost 는 ::1 로 풀릴 수 있어 주소를 적는다
+const SSE_SERVER = process.env.SSE_SERVER ?? 'http://127.0.0.1:4100';
 
 export default defineConfig({
   plugins: [react()],

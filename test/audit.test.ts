@@ -73,7 +73,7 @@ test('실패한 전이는 감사 로그를 남기지 않는다 (트랜잭션 롤
   assert.equal(s.events(inv).length, before);
 });
 
-test('같은 DB 파일을 연 두 서버 프로세스가 동시에 결정해도 하나만 성공한다', async () => {
+test('같은 DB 파일을 연 두 연결이 모두 pending 을 본 뒤 차례로 결정하면 뒤 결정은 거부된다', async () => {
   const { mkdtempSync, rmSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -104,4 +104,59 @@ test('결정 기록 쓰기가 실패하면 제안 상태도 바뀌지 않는다'
   s.db.exec("CREATE TRIGGER fail_decision BEFORE INSERT ON audit_events WHEN NEW.kind = 'decision' BEGIN SELECT RAISE(ABORT, '쓰기 실패'); END;");
   assert.throws(() => s.decide(p.id, 'kim', 'approved'), /쓰기 실패/);
   assert.equal(s.proposal(p.id)!.status, 'pending');
+});
+
+test('앱 코드를 거치지 않은 SQL 로도 제안 상태를 건너뛰거나 결정을 고치거나 지울 수 없다', () => {
+  const s = store();
+  const inv = s.createInvestigation('silent-db', 1, 'm');
+  const p = s.propose(inv, { type: 'escalate', service: 'payment-db' });
+  const blocked = /pending→approved\|rejected, approved→executed 로만/;
+  assert.throws(() => s.db.prepare("UPDATE proposals SET status = 'executed', decided_by = 'x' WHERE id = ?").run(p.id), blocked);
+  assert.throws(() => s.db.prepare("UPDATE proposals SET action = '{}' WHERE id = ?").run(p.id), blocked);
+  s.decide(p.id, 'kim', 'approved');
+  assert.throws(() => s.db.prepare("UPDATE proposals SET decided_by = 'operator:lee' WHERE id = ?").run(p.id), blocked);
+  assert.throws(() => s.db.prepare("UPDATE proposals SET status = 'rejected', reason = '바꿈' WHERE id = ?").run(p.id), blocked);
+  assert.throws(() => s.db.prepare('DELETE FROM proposals WHERE id = ?').run(p.id), /지울 수 없다/);
+  // 허용된 전이는 그대로 된다
+  assert.deepEqual([s.markExecuted(p.id).status, s.proposal(p.id)!.decidedBy], ['executed', 'operator:kim']);
+});
+
+test('승인 후 실행 기록이 실패하면 승인도 되돌려 approved 에 멈춘 제안이 남지 않는다', () => {
+  const s = store();
+  const inv = s.createInvestigation('silent-db', 1, 'm');
+  const p = s.propose(inv, { type: 'escalate', service: 'payment-db' });
+  const before = s.events(inv).length;
+  s.db.exec("CREATE TRIGGER fail_execution BEFORE INSERT ON audit_events WHEN NEW.kind = 'execution' BEGIN SELECT RAISE(ABORT, '실행 기록 실패'); END;");
+  assert.throws(() => s.decideAndExecute(p.id, 'kim', 'approved'), /실행 기록 실패/);
+  assert.deepEqual([s.proposal(p.id)!.status, s.events(inv).length], ['pending', before]);
+  s.db.exec('DROP TRIGGER fail_execution');
+  assert.equal(s.decideAndExecute(p.id, 'kim', 'approved').status, 'executed');
+  assert.deepEqual(s.events(inv).slice(-2).map((e) => e.kind), ['decision', 'execution']);
+});
+
+test('전이 오류는 종류로 나뉜다 (이미 결정 409 · 입력 오류 400 · 없는 제안 404)', () => {
+  const s = store();
+  const inv = s.createInvestigation('silent-db', 1, 'm');
+  const p = s.propose(inv, { type: 'escalate', service: 'payment-db' });
+  const reasonOf = (f: () => unknown) => {
+    try {
+      f();
+    } catch (e) {
+      return e instanceof TransitionError ? e.reason : 'other';
+    }
+    return 'none';
+  };
+  assert.deepEqual(
+    [
+      reasonOf(() => s.decide(p.id, 'bad name!', 'approved')),
+      reasonOf(() => s.decide(p.id, 'kim', 'rejected', '  ')),
+      reasonOf(() => s.decide('00000000-0000-0000-0000-000000000000', 'kim', 'approved')),
+      reasonOf(() => (s.decide(p.id, 'kim', 'approved'), s.decide(p.id, 'lee', 'approved'))),
+    ],
+    ['invalid', 'invalid', 'not_found', 'conflict'],
+  );
+});
+
+test('다른 연결이 쓰는 중이면 바로 실패하지 않고 기다린다 (busy_timeout)', () => {
+  assert.equal((store().db.prepare('PRAGMA busy_timeout').get() as { timeout: number }).timeout, 5000);
 });

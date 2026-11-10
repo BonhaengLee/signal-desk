@@ -1,10 +1,12 @@
 // 조사·조치 기록 저장소 (SQLite, Node 내장 node:sqlite).
 // - audit_events 는 추가만 된다. 수정·삭제는 트리거가 DB 수준에서 거부한다
 // - proposals 의 상태는 pending → approved → executed 또는 pending → rejected 로만 바뀐다.
-//   "지금 상태가 X 일 때만 바꾼다"를 UPDATE ... WHERE status = X 한 문장으로 해서, 두 사람이 동시에 눌러도 한 명만 성공한다
+//   "지금 상태가 X 일 때만 바꾼다"를 UPDATE ... WHERE status = X 한 문장으로 해서, 두 사람이 동시에 눌러도 한 명만 성공한다.
+//   이 규칙은 트리거로 DB 에도 걸어 둔다. 앱 코드를 거치지 않은 UPDATE·DELETE 도 막힌다
 
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
+import { decisionInputError } from './rules.ts';
 
 export type Actor = 'agent' | 'system' | `operator:${string}`;
 export type AuditKind = 'investigation_started' | 'tool_call' | 'verdict' | 'proposal' | 'decision' | 'execution' | 'investigation_failed';
@@ -34,12 +36,20 @@ export interface Proposal {
   reason: string | null;
 }
 
-/** 상태 전이 실패. 서버는 409 로 돌려준다 */
-export class TransitionError extends Error {}
+/** 상태 전이 실패. conflict(이미 결정됨 → 409)와 invalid(입력 오류 → 400)를 나눈다 */
+export class TransitionError extends Error {
+  readonly reason: 'conflict' | 'invalid' | 'not_found';
+  constructor(reason: 'conflict' | 'invalid' | 'not_found', message: string) {
+    super(message);
+    this.reason = reason;
+  }
+}
 
 const SCHEMA = `
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
+-- 다른 연결이 쓰는 중이면 바로 SQLITE_BUSY 를 내지 않고 기다린다
+PRAGMA busy_timeout = 5000;
 
 CREATE TABLE IF NOT EXISTS investigations (
   id          TEXT PRIMARY KEY,
@@ -78,6 +88,20 @@ CREATE TABLE IF NOT EXISTS proposals (
   CHECK (status <> 'rejected' OR length(trim(reason)) > 0)
 );
 CREATE INDEX IF NOT EXISTS proposals_by_investigation ON proposals (investigation_id, status);
+
+-- 허용된 전이만 통과시킨다. 결정 뒤에는 결정자·시각·사유도 바꿀 수 없다
+CREATE TRIGGER IF NOT EXISTS proposals_transition BEFORE UPDATE ON proposals
+WHEN NOT (
+  NEW.id = OLD.id AND NEW.investigation_id = OLD.investigation_id AND NEW.action = OLD.action AND NEW.created_at = OLD.created_at
+  AND (
+    (OLD.status = 'pending' AND NEW.status IN ('approved', 'rejected'))
+    OR (OLD.status = 'approved' AND NEW.status = 'executed'
+        AND NEW.decided_by IS OLD.decided_by AND NEW.decided_at IS OLD.decided_at AND NEW.reason IS OLD.reason)
+  )
+)
+BEGIN SELECT RAISE(ABORT, 'proposals 는 pending→approved|rejected, approved→executed 로만 바뀐다'); END;
+CREATE TRIGGER IF NOT EXISTS proposals_no_delete BEFORE DELETE ON proposals
+BEGIN SELECT RAISE(ABORT, 'proposals 는 지울 수 없다'); END;
 `;
 
 export class AuditStore {
@@ -142,33 +166,40 @@ export class AuditStore {
 
   /** 승인·거절. pending 일 때만 바뀐다. 거절은 사유가 있어야 한다 */
   decide(id: string, operator: string, decision: 'approved' | 'rejected', reason?: string): Proposal {
-    if (!/^[\w.-]{1,40}$/.test(operator)) throw new TransitionError('operator 는 영문·숫자·._- 1~40자');
-    if (decision === 'rejected' && !reason?.trim()) throw new TransitionError('거절에는 사유가 필요하다');
-    const actor: Actor = `operator:${operator}`;
-    return this.transition(id, 'pending', decision, actor, reason ?? null, 'decision');
+    const actor = decisionActor(operator, decision, reason);
+    return this.transaction(() => this.transition(id, 'pending', decision, actor, reason ?? null, 'decision'));
   }
 
   /** 실행 기록. approved 일 때만 된다. 실제 조치는 시뮬레이션이라 기록만 남긴다 */
   markExecuted(id: string): Proposal {
-    return this.transition(id, 'approved', 'executed', 'system', null, 'execution');
+    return this.transaction(() => this.transition(id, 'approved', 'executed', 'system', null, 'execution'));
   }
 
-  private transition(id: string, from: ProposalStatus, to: ProposalStatus, actor: Actor, reason: string | null, kind: AuditKind): Proposal {
+  /** 결정하고, 승인이면 실행 기록까지 한 트랜잭션으로 남긴다. 실행 기록이 실패하면 승인도 되돌려 approved 에 멈춘 제안이 생기지 않는다 */
+  decideAndExecute(id: string, operator: string, decision: 'approved' | 'rejected', reason?: string): Proposal {
+    const actor = decisionActor(operator, decision, reason);
     return this.transaction(() => {
-      const at = this.now().toISOString();
-      const decidedBy = to === 'executed' ? null : actor; // 실행은 결정자를 덮어쓰지 않는다
-      const res = this.db
-        .prepare(`UPDATE proposals SET status = ?, decided_by = COALESCE(?, decided_by), decided_at = COALESCE(?, decided_at), reason = COALESCE(?, reason)
-          WHERE id = ? AND status = ?`)
-        .run(to, decidedBy, to === 'executed' ? null : at, reason, id, from);
-      if (res.changes !== 1) {
-        const current = this.proposal(id);
-        throw new TransitionError(current ? `${current.status} 상태에서는 ${to} 로 바꿀 수 없다` : `없는 제안: ${id}`);
-      }
-      const p = this.proposal(id)!;
-      this.append(p.investigationId, actor, kind, { proposalId: id, from, to, ...(reason ? { reason } : {}) });
-      return p;
+      const p = this.transition(id, 'pending', decision, actor, reason ?? null, 'decision');
+      return p.status === 'approved' ? this.transition(id, 'approved', 'executed', 'system', null, 'execution') : p;
     });
+  }
+
+  /** 트랜잭션 안에서만 부른다 */
+  private transition(id: string, from: ProposalStatus, to: ProposalStatus, actor: Actor, reason: string | null, kind: AuditKind): Proposal {
+    const at = this.now().toISOString();
+    const decidedBy = to === 'executed' ? null : actor; // 실행은 결정자를 덮어쓰지 않는다
+    const res = this.db
+      .prepare(`UPDATE proposals SET status = ?, decided_by = COALESCE(?, decided_by), decided_at = COALESCE(?, decided_at), reason = COALESCE(?, reason)
+        WHERE id = ? AND status = ?`)
+      .run(to, decidedBy, to === 'executed' ? null : at, reason, id, from);
+    if (res.changes !== 1) {
+      const current = this.proposal(id);
+      if (!current) throw new TransitionError('not_found', `없는 제안: ${id}`);
+      throw new TransitionError('conflict', `${current.status} 상태에서는 ${to} 로 바꿀 수 없다`);
+    }
+    const p = this.proposal(id)!;
+    this.append(p.investigationId, actor, kind, { proposalId: id, from, to, ...(reason ? { reason } : {}) });
+    return p;
   }
 
   private transaction<T>(fn: () => T): T {
@@ -182,4 +213,11 @@ export class AuditStore {
       throw e;
     }
   }
+}
+
+/** 결정 입력 검사. 규칙은 rules.ts 하나에 있고 데모도 같은 것을 쓴다 */
+function decisionActor(operator: string, decision: 'approved' | 'rejected', reason?: string): Actor {
+  const error = decisionInputError(operator, decision, reason);
+  if (error) throw new TransitionError('invalid', error);
+  return `operator:${operator}`;
 }

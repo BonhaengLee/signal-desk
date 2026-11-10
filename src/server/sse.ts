@@ -6,10 +6,12 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { simulate, type Scenario } from '../simulator/simulate.ts';
 import type { SignalEvent } from '../events/schema.ts';
+import { isScenario, parseSeed, SCENARIOS } from '../simulator/catalog.ts';
 
-export const SCENARIOS = ['deploy-regression', 'db-degradation', 'retry-storm', 'silent-db', 'hidden-deploy'] as const;
 export const ANCHOR_MS = Date.parse('2026-01-01T00:00:00Z');
 export const HEARTBEAT_MS = 15_000; // 프록시가 조용한 연결을 끊지 않도록 (Cloudflare 는 약 100초)
+/** 시나리오·시드 조합별 이벤트 캐시 상한. 시나리오 5개 × 자주 쓰는 시드 몇 개면 충분하다 */
+export const CACHE_MAX = 32;
 export const RETRY_MS = 2_000; // 끊겼을 때 브라우저가 다시 붙기까지 기다릴 시간
 
 export interface Clock {
@@ -61,14 +63,19 @@ export function createSseServer(options: ServerOptions = {}): http.Server {
 
   // 시나리오 이름은 목록에 있는 것만 받는다. 사용자 입력으로 파일 경로를 만들지 않는다
   const prepare = (name: string, seed: number): Prepared | undefined => {
-    if (!(SCENARIOS as readonly string[]).includes(name)) return undefined;
+    if (!isScenario(name)) return undefined;
     const key = `${name}:${seed}`;
     let p = cache.get(key);
-    if (!p) {
+    if (p) {
+      cache.delete(key); // 다시 넣어 최근 사용으로 옮긴다
+      cache.set(key, p);
+    } else {
       const scenario = JSON.parse(readFileSync(new URL(`${name}.json`, dir), 'utf8')) as Scenario;
       const events = [...simulate(scenario, seed)];
       const start = Date.parse(scenario.startAt);
       p = { scenario, events, simSecs: events.map((e) => (e.at.getTime() - start) / 1000) };
+      // 시드마다 이벤트 배열 전체를 들고 있으므로 개수를 묶는다. 가장 오래 안 쓴 것부터 버린다
+      if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
       cache.set(key, p);
     }
     return p;
@@ -98,13 +105,16 @@ export function createSseServer(options: ServerOptions = {}): http.Server {
       return;
     }
 
-    const seed = Number(url.searchParams.get('seed') ?? 42);
+    // 쿼리는 문자열이라 숫자 모양일 때만 숫자로 바꾼 뒤 조사 API 와 같은 규칙으로 검사한다
+    const seedParam = url.searchParams.get('seed');
+    const sd = parseSeed(seedParam === null ? undefined : /^\d+$/.test(seedParam) ? Number(seedParam) : seedParam, 42);
     const speed = Number(url.searchParams.get('speed') ?? 1);
-    if (!Number.isInteger(seed) || !(speed > 0 && speed <= 100)) {
+    if (!sd.ok || !(speed > 0 && speed <= 100)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'seed 는 정수, speed 는 0 초과 100 이하' }));
+      res.end(JSON.stringify({ error: `${sd.ok ? '' : `${sd.error}. `}speed 는 0 초과 100 이하` }));
       return;
     }
+    const { seed } = sd;
     const prepared = prepare(url.searchParams.get('scenario') ?? 'deploy-regression', seed);
     if (!prepared) {
       res.writeHead(404, { 'Content-Type': 'application/json' });

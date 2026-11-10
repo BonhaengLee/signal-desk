@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { investigate, type ChatFn, type ChatMessage } from '../src/agent/agent.ts';
 import { firstAlertBaseline, latestDeployBaseline } from '../src/agent/baseline.ts';
 import { parseVerdict, runTool } from '../src/agent/tools.ts';
-import { contextFor, isCorrect, SCENARIO_FILES, traceLine } from '../src/agent/eval.ts';
+import { contextFor, isCorrect, traceLine } from '../src/agent/eval.ts';
+import { SCENARIOS } from '../src/simulator/catalog.ts';
 import type { Scenario } from '../src/simulator/simulate.ts';
 
 const load = (name: string) => JSON.parse(readFileSync(`scenarios/${name}.json`, 'utf8')) as Scenario;
@@ -27,7 +28,7 @@ function scripted(calls: [string, Record<string, unknown>][][]): { chat: ChatFn;
 
 test('두 기준선은 각자 함정 시나리오에서 틀린다', () => {
   const score = (f: typeof latestDeployBaseline) =>
-    SCENARIO_FILES.map((n) => {
+    SCENARIOS.map((n) => {
       const s = load(n);
       return [1, 2, 3].every((seed) => isCorrect(f(contextFor(s, seed).events), s));
     });

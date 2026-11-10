@@ -16,9 +16,9 @@ const fakeChat: ChatFn = async (messages) => {
   return { role: 'assistant', content: null, tool_calls: [{ id: `c${turn}`, function: call }] };
 };
 
-async function start(chat: ChatFn = fakeChat) {
+async function start(chat: ChatFn = fakeChat, maxRunning?: number) {
   const store = new AuditStore();
-  const api = createApiHandler({ store, chat, model: 'fake', pollMs: 10 });
+  const api = createApiHandler({ store, chat, model: 'fake', pollMs: 10, maxRunning });
   const server = createSseServer({ extra: api.handle });
   await new Promise<void>((r) => server.listen(0, r));
   const base = `http://localhost:${(server.address() as AddressInfo).port}`;
@@ -105,8 +105,40 @@ test('atSec 을 주면 그 초까지의 기록만 에이전트에게 넘기고, 
     await t.api.idle();
     assert.deepEqual(seen[0], [{ t: 60, service: 'payment-api', version: 'v1.4.2' }]);
     assert.deepEqual(t.store.events(id)[0]!.payload, { scenario: 'hidden-deploy', seed: 1, model: 'fake', atSec: 62 });
-    const bad = await Promise.all([-1, 181, 'x'].map((atSec) => t.post('/investigations', { scenario: 'hidden-deploy', atSec }).then((r) => r.status)));
-    assert.deepEqual(bad, [400, 400, 400]);
+    // 숫자 문자열('62')도 거절한다. 화면은 숫자로 보내고, 형식이 다른 요청을 조용히 바꿔 받지 않는다
+    const bad = await Promise.all([-1, 181, 'x', '62', null].map((atSec) => t.post('/investigations', { scenario: 'hidden-deploy', atSec }).then((r) => r.status)));
+    assert.deepEqual(bad, [400, 400, 400, 400, 400]);
+  } finally {
+    await t.close();
+  }
+});
+
+test('seed 는 1~1000000 정수만 받고, 숫자 문자열·true·null 은 바꿔 받지 않고 400', async () => {
+  const t = await start();
+  try {
+    const bad = await Promise.all(['5', true, null, 0, 1.5, 1_000_001].map((seed) => t.post('/investigations', { scenario: 'hidden-deploy', seed }).then((r) => r.status)));
+    assert.deepEqual(bad, [400, 400, 400, 400, 400, 400]);
+    assert.equal((await t.post('/investigations', { scenario: 'hidden-deploy', seed: 1_000_000 })).status, 202);
+    await t.api.idle();
+  } finally {
+    await t.close();
+  }
+});
+
+test('동시에 도는 조사가 상한에 닿으면 429, 하나가 끝나면 다시 받는다', async () => {
+  // 풀어 줄 때까지 답하지 않는 가짜 모델
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const chat: ChatFn = async (messages) => (await gate, fakeChat(messages, []));
+  const t = await start(chat, 1);
+  try {
+    assert.equal((await t.post('/investigations', { scenario: 'hidden-deploy' })).status, 202);
+    const busy = await t.post('/investigations', { scenario: 'hidden-deploy' });
+    assert.deepEqual([busy.status, ((await busy.json()) as { error: string }).error], [429, '조사가 이미 1건 돌고 있습니다. 끝난 뒤 다시 요청하세요']);
+    release();
+    await t.api.idle();
+    assert.equal((await t.post('/investigations', { scenario: 'hidden-deploy' })).status, 202);
+    await t.api.idle();
   } finally {
     await t.close();
   }

@@ -56,3 +56,39 @@ test('잘못된 시나리오·서비스는 isError 로 돌려준다', async () =
   const r = await client.callTool({ name: 'get_logs', arguments: { service: 'nope' } });
   assert.deepEqual([r.isError, body(r)], [true, { error: '모르는 서비스: nope' }]);
 });
+
+test('load_incident 에 atSec 을 주면 그 초까지의 기록만 보고, 어디까지인지 돌려준다', async () => {
+  const client = await connected();
+  const scenario = JSON.parse(readFileSync('scenarios/hidden-deploy.json', 'utf8')) as Scenario;
+  // hidden-deploy 배포: payment-api T+60, inventory-api T+65. T+62 까지면 첫 배포만 보여야 한다
+  const loaded = body(await client.callTool({ name: 'load_incident', arguments: { scenario: 'hidden-deploy', seed: 1, atSec: 62 } }));
+  assert.equal(loaded.untilSec, 62);
+  const deploys = body(await client.callTool({ name: 'list_deploys', arguments: {} }));
+  assert.deepEqual(deploys, [{ t: 60, service: 'payment-api', version: 'v1.4.2' }]);
+  assert.deepEqual(deploys, JSON.parse(JSON.stringify(runTool(contextFor(scenario, 1, 62), 'list_deploys', {}))));
+
+  // 빼면 끝난 장애로 보고 전체 기록
+  const full = body(await client.callTool({ name: 'load_incident', arguments: { scenario: 'hidden-deploy', seed: 1 } }));
+  assert.equal(full.untilSec, scenario.durationSec);
+  const allDeploys = body(await client.callTool({ name: 'list_deploys', arguments: {} }));
+  assert.deepEqual(allDeploys, [
+    { t: 60, service: 'payment-api', version: 'v1.4.2' },
+    { t: 65, service: 'inventory-api', version: 'v2.8.0' },
+  ]);
+});
+
+test('load_incident 의 atSec 범위·형식이 틀리면 조사 API 와 같은 문구로 isError', async () => {
+  const client = await connected();
+  for (const atSec of [-1, 181, '62']) {
+    const r = await client.callTool({ name: 'load_incident', arguments: { scenario: 'hidden-deploy', atSec } });
+    assert.deepEqual([r.isError, body(r)], [true, { error: 'atSec 은 0~180 초' }]);
+  }
+});
+
+test('load_incident 의 seed 도 조사 API 와 같은 규칙으로 검사한다', async () => {
+  const client = await connected();
+  for (const seed of ['5', 0, 1.5]) {
+    const r = await client.callTool({ name: 'load_incident', arguments: { scenario: 'hidden-deploy', seed } });
+    assert.deepEqual([r.isError, body(r)], [true, { error: 'seed 는 1~1000000 정수' }]);
+  }
+});

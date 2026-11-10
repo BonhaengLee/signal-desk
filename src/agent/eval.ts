@@ -6,8 +6,8 @@ import { simulate, type Scenario } from '../simulator/simulate.ts';
 import { investigate, openAiChat, type ChatFn } from './agent.ts';
 import { firstAlertBaseline, latestDeployBaseline } from './baseline.ts';
 import type { Judgement, ToolContext, Verdict } from './tools.ts';
+import { SCENARIOS } from '../simulator/catalog.ts';
 
-export const SCENARIO_FILES = ['deploy-regression', 'db-degradation', 'retry-storm', 'silent-db', 'hidden-deploy'];
 
 /** 조사 대상. atSec 을 주면 시나리오 시작부터 그 초까지의 이벤트만 넘긴다 (화면이 보고 있는 시점까지만 아는 에이전트).
  *  평가는 atSec 없이 전체 기록으로 채점한다 */
@@ -23,6 +23,7 @@ export function contextFor(scenario: Scenario, seed: number, atSec?: number): To
     startMs: start,
   };
 }
+
 
 export const isCorrect = (v: Judgement | undefined, s: Scenario) =>
   v !== undefined && v.service === s.rootCause.service && v.kind === s.rootCause.kind;
@@ -62,7 +63,7 @@ export interface EvalOptions {
 export async function evaluate(chat: ChatFn, seeds: number[], opts: EvalOptions = {}): Promise<Row[]> {
   const rows: Row[] = [];
   let ran = 0;
-  for (const name of SCENARIO_FILES) {
+  for (const name of SCENARIOS) {
     const scenario = JSON.parse(readFileSync(`scenarios/${name}.json`, 'utf8')) as Scenario;
     for (const seed of seeds) {
       const done = opts.prev?.find((r) => r.scenario === name && r.seed === seed && r.measured);

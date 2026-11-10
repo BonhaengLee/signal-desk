@@ -8,7 +8,8 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { runTool, TOOL_SPECS, type ToolContext } from '../agent/tools.ts';
-import { contextFor, SCENARIO_FILES } from '../agent/eval.ts';
+import { contextFor } from '../agent/eval.ts';
+import { isScenario, parseAtSec, parseSeed, SCENARIOS } from '../simulator/catalog.ts';
 import type { Scenario } from '../simulator/simulate.ts';
 
 const SCENARIO_DIR = fileURLToPath(new URL('../../scenarios/', import.meta.url));
@@ -19,8 +20,13 @@ const LOAD_INCIDENT = {
   inputSchema: {
     type: 'object',
     properties: {
-      scenario: { type: 'string', enum: SCENARIO_FILES },
+      scenario: { type: 'string', enum: SCENARIOS },
       seed: { type: 'integer', minimum: 1, description: '같은 시드면 같은 이벤트가 나온다' },
+      atSec: {
+        type: 'number',
+        minimum: 0,
+        description: '시나리오 시작부터 이 초까지의 기록만 본다(장애가 진행 중인 시점의 조사). 빼면 끝난 장애를 돌아보는 것으로 보고 전체 기록을 준다',
+      },
     },
     required: ['scenario'],
   },
@@ -50,12 +56,16 @@ export function createMcpServer(): Server {
     const { name, arguments: args = {} } = req.params;
     if (name === LOAD_INCIDENT.name) {
       const scenario = String(args.scenario);
-      const seed = Number(args.seed ?? 1);
-      if (!SCENARIO_FILES.includes(scenario)) return text({ error: `모르는 시나리오: ${scenario}` }, true);
-      if (!Number.isInteger(seed) || seed < 1) return text({ error: 'seed 는 1 이상의 정수' }, true);
+      if (!isScenario(scenario)) return text({ error: `모르는 시나리오: ${scenario}` }, true);
+      const sd = parseSeed(args.seed, 1);
+      if (!sd.ok) return text({ error: sd.error }, true);
+      const { seed } = sd;
       const s = JSON.parse(readFileSync(`${SCENARIO_DIR}${scenario}.json`, 'utf8')) as Scenario;
-      ctx = contextFor(s, seed);
-      return text({ scenario, seed, events: ctx.events.length, entry: s.entry, description: '조사 시작. 정답은 숨김' });
+      const at = parseAtSec(args.atSec, s.durationSec);
+      if (!at.ok) return text({ error: at.error }, true);
+      ctx = contextFor(s, seed, at.atSec);
+      // 어디까지의 기록인지 돌려줘야 클라이언트가 "아직 안 일어난 일"을 근거로 쓰지 않는다
+      return text({ scenario, seed, untilSec: at.atSec ?? s.durationSec, events: ctx.events.length, entry: s.entry, description: '조사 시작. 정답은 숨김' });
     }
     if (!INVESTIGATION_TOOLS.some((t) => t.name === name)) return text({ error: `모르는 도구: ${name}` }, true);
     if (!ctx) return text({ error: '먼저 load_incident 를 호출해' }, true);

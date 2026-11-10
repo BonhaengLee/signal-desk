@@ -3,16 +3,17 @@
 //   GET  /investigations/:id                                              → { events, proposals }
 //   GET  /investigations/:id/stream     감사 로그를 SSE 로. id = seq 라 Last-Event-ID 로 이어 받는다
 //   POST /proposals/:id/decision        { operator, decision, reason? }   → 승인이면 실행까지 기록. 이미 결정됐으면 409
-// 인증은 없다. operator 는 요청 본문의 이름을 그대로 믿는다 (데모 범위의 한계)
+// 인증은 없다. operator 는 요청 본문의 이름을 그대로 믿는다 (데모 범위의 한계). 그래서 서버는 기본으로 127.0.0.1 에만 열고(main.ts), 동시 조사 수를 묶는다
 
 import type http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { AuditStore, TransitionError, type Proposal } from '../audit/store.ts';
 import type { ChatFn } from '../agent/agent.ts';
 import { contextFor } from '../agent/eval.ts';
+import { isScenario, parseAtSec, parseSeed, SCENARIOS } from '../simulator/catalog.ts';
 import { runInvestigation } from '../agent/run.ts';
 import type { Scenario } from '../simulator/simulate.ts';
-import { formatSse, HEARTBEAT_MS, SCENARIOS } from './sse.ts';
+import { formatSse, HEARTBEAT_MS } from './sse.ts';
 
 export interface ApiOptions {
   store: AuditStore;
@@ -21,10 +22,15 @@ export interface ApiOptions {
   scenarioDir?: URL;
   pollMs?: number;
   heartbeatMs?: number;
+  maxRunning?: number;
 }
+
+/** 동시에 도는 조사 수 상한. 조사 1건이 LLM 을 9회 안팎 부른다 */
+export const MAX_RUNNING = 2;
 
 const MAX_BODY = 10_000;
 const UUID = '[0-9a-f-]{36}';
+const TRANSITION_STATUS = { conflict: 409, invalid: 400, not_found: 404 } as const;
 
 function json(res: http.ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -53,6 +59,7 @@ export function createApiHandler(opts: ApiOptions) {
   const dir = opts.scenarioDir ?? new URL('../../scenarios/', import.meta.url);
   const pollMs = opts.pollMs ?? 200;
   const heartbeatMs = opts.heartbeatMs ?? HEARTBEAT_MS;
+  const maxRunning = opts.maxRunning ?? MAX_RUNNING;
   const running = new Set<Promise<void>>(); // 테스트·종료 시 기다릴 수 있게
 
   const proposalsOf = (id: string): Proposal[] =>
@@ -69,17 +76,19 @@ export function createApiHandler(opts: ApiOptions) {
     if (req.method === 'POST' && path === '/investigations') {
       const body = await readJson(req);
       const scenario = String(body?.scenario ?? '');
-      const seed = Number(body?.seed ?? 1);
-      if (!(SCENARIOS as readonly string[]).includes(scenario) || !Number.isInteger(seed) || seed < 1) {
-        json(res, 400, { error: `scenario 는 ${SCENARIOS.join(', ')} 중 하나, seed 는 1 이상 정수` });
+      if (!isScenario(scenario)) {
+        json(res, 400, { error: `scenario 는 ${SCENARIOS.join(', ')} 중 하나` });
         return true;
       }
+      const sd = parseSeed(body?.seed, 1);
+      if (!sd.ok) return json(res, 400, { error: sd.error }), true;
       const s = JSON.parse(readFileSync(new URL(`${scenario}.json`, dir), 'utf8')) as Scenario;
-      const atSec = body?.atSec === undefined ? undefined : Number(body.atSec);
-      if (atSec !== undefined && !(Number.isFinite(atSec) && atSec >= 0 && atSec <= s.durationSec)) {
-        json(res, 400, { error: `atSec 은 0~${s.durationSec} 초` });
-        return true;
-      }
+      const at = parseAtSec(body?.atSec, s.durationSec);
+      if (!at.ok) return json(res, 400, { error: at.error }), true;
+      // 조사마다 LLM 을 여러 번 부른다. 인증이 없으므로 동시에 도는 수를 묶어 비용이 무한히 늘지 않게 한다
+      if (running.size >= maxRunning) return json(res, 429, { error: `조사가 이미 ${running.size}건 돌고 있습니다. 끝난 뒤 다시 요청하세요` }), true;
+      const { seed } = sd;
+      const { atSec } = at;
       const id = store.createInvestigation(scenario, seed, model, atSec);
       const job = runInvestigation(store, id, contextFor(s, seed, atSec), chat).finally(() => running.delete(job));
       running.add(job);
@@ -121,14 +130,12 @@ export function createApiHandler(opts: ApiOptions) {
         json(res, 400, { error: 'operator(문자열), decision(approved|rejected) 필요' });
         return true;
       }
-      if (!store.proposal(m[1]!)) return json(res, 404, { error: '없는 제안' }), true;
       try {
-        let p = store.decide(m[1]!, body.operator, decision, typeof body.reason === 'string' ? body.reason : undefined);
-        if (p.status === 'approved') p = store.markExecuted(p.id); // 실제 조치는 시뮬레이션: 실행 기록만 남긴다
-        json(res, 200, p);
+        // 승인이면 실행 기록까지 한 트랜잭션. 실제 조치는 시뮬레이션이라 기록만 남긴다
+        json(res, 200, store.decideAndExecute(m[1]!, body.operator, decision, typeof body.reason === 'string' ? body.reason : undefined));
       } catch (e) {
         if (!(e instanceof TransitionError)) throw e;
-        json(res, e.message.includes('상태에서는') ? 409 : 400, { error: e.message });
+        json(res, TRANSITION_STATUS[e.reason], { error: e.message });
       }
       return true;
     }

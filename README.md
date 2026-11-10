@@ -159,7 +159,7 @@ curl -N localhost:4100/investigations/<id>/stream
 curl -X POST localhost:4100/proposals/<proposalId>/decision -d '{"operator":"kim","decision":"approved"}'
 ```
 
-Claude Code 에서 저장소를 열면 `.mcp.json` 의 `signal-desk` MCP 서버가 붙습니다. `load_incident` 로 시나리오를 고른 뒤 같은 조사 도구를 쓸 수 있습니다.
+Claude Code 에서 저장소를 열면 `.mcp.json` 의 `signal-desk` MCP 서버가 붙습니다. `load_incident` 로 시나리오를 고른 뒤 같은 조사 도구를 쓸 수 있습니다. `atSec` 을 주면 그 초까지의 기록만 보고, 빼면 끝난 장애로 보고 전체 기록을 줍니다.
 
 ```sh
 npm test             # 테스트 (node:test)

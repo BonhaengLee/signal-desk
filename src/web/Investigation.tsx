@@ -9,10 +9,10 @@ import { formatElapsed } from './derive.ts';
 import { ApiError, decideProposal, startInvestigation, useInvestigation } from './useInvestigation.ts';
 import { DEMO } from './demo.ts';
 import { Badge, Button, Card, EmptyState, VisuallyHidden, type Tone } from './ui/controls.tsx';
+import { OPERATOR_RE } from '../audit/rules.ts';
 import s from './Investigation.module.css';
 
 const SEED = 42; // 화면 스트림(/events)과 같은 시드. 에이전트가 화면과 같은 사건을 조사한다
-const OPERATOR_RE = /^[\w.-]{1,40}$/; // 서버 규칙과 같다 (src/audit/store.ts decide)
 const OPERATOR_KEY = 'signal-desk.operator';
 
 const TOOL_LABEL: Record<string, string> = {

@@ -133,7 +133,7 @@ test('목록에 없는 시나리오·경로 조작·잘못된 인자는 스트�
     for (const q of ['scenario=nope', 'scenario=../package', 'scenario=%2E%2E%2Fpackage']) {
       assert.equal((await fetch(`${base}/events?${q}`)).status, 404, q);
     }
-    for (const q of ['seed=1.5', 'speed=0', 'speed=1000', 'speed=abc']) {
+    for (const q of ['seed=1.5', 'seed=0', 'seed=-1', 'seed=abc', 'seed=1e3', 'seed=1000001', 'speed=0', 'speed=1000', 'speed=abc']) {
       assert.equal((await fetch(`${base}/events?${q}`)).status, 400, q);
     }
     assert.equal((await fetch(`${base}/nope`)).status, 404);

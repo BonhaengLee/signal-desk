@@ -5,6 +5,7 @@
 // - 승인·거절: 브라우저 안에서만 반영하고 저장하지 않는다. 서버와 같은 규칙(이름 형식, 거절 사유, 한 번만 결정)을 따른다
 
 import type { AuditEvent } from '../audit/store.ts';
+import { decisionInputError } from '../audit/rules.ts';
 import type { SseMessage } from '../client/sse.ts';
 import type { SubscribeOptions } from '../client/subscribe.ts';
 
@@ -123,8 +124,8 @@ export async function demoStart(scenario: string, nowSec: number): Promise<strin
 
 /** 브라우저 안 결정. 규칙은 서버(src/audit/store.ts decide)와 같다 */
 export function demoDecide(proposalId: string, operator: string, decision: 'approved' | 'rejected', reason?: string): void {
-  if (!/^[\w.-]{1,40}$/.test(operator)) throw new DemoError(400, 'operator 는 영문·숫자·._- 1~40자');
-  if (decision === 'rejected' && !reason?.trim()) throw new DemoError(400, '거절에는 사유가 필요하다');
+  const error = decisionInputError(operator, decision, reason);
+  if (error) throw new DemoError(400, error);
   const id = proposalOwner.get(proposalId);
   if (!id) throw new DemoError(404, '없는 제안');
   const list = local.get(id) ?? local.set(id, []).get(id)!;
