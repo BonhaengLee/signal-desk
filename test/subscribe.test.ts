@@ -110,6 +110,35 @@ test('HTTP 오류면 백오프를 늘려 가며 다시 시도하고, 메시지�
   assert.deepEqual(delays, [1000, 2000, 4000, 1000, 1000]);
 });
 
+test('4xx 는 다시 시도하지 않고 실패로 넘기되, 408·429 는 기다렸다 다시 시도한다', async () => {
+  const run = async (codes: number[]) => {
+    let requests = 0;
+    const server = http.createServer((_req, res) => {
+      res.writeHead(codes[Math.min(requests++, codes.length - 1)]!).end();
+    });
+    await new Promise<void>((r) => server.listen(0, r));
+    const ac = new AbortController();
+    let sleeps = 0;
+    const outcome = await subscribe(`http://localhost:${(server.address() as AddressInfo).port}`, {
+      signal: ac.signal,
+      sleep: async () => {
+        if (++sleeps === 3) ac.abort();
+      },
+      onMessage: () => {},
+    }).then(
+      () => 'closed',
+      (e: { status?: number }) => `rejected ${e.status}`,
+    );
+    await new Promise<void>((r) => server.close(() => r()));
+    return [outcome, requests];
+  };
+  assert.deepEqual(await run([404]), ['rejected 404', 1]);
+  assert.deepEqual(await run([400]), ['rejected 400', 1]);
+  // 429 두 번 뒤 404: 429 는 다시 시도하고, 404 에서 멈춘다
+  assert.deepEqual(await run([429, 429, 404]), ['rejected 404', 3]);
+  assert.deepEqual(await run([408]), ['closed', 3]);
+});
+
 test('하트비트조차 오지 않는 연결은 끊고 다시 붙는다 (프록시가 끊김을 숨기는 경우)', async () => {
   let requests = 0;
   const server = http.createServer((_req, res) => {

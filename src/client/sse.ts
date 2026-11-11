@@ -24,6 +24,15 @@ export function splitMessages(buffer: string): { blocks: string[]; rest: string 
   return { blocks: parts, rest };
 }
 
+/** 서버가 스트림 대신 HTTP 오류로 답했다. subscribe 가 다시 시도할지 status 로 고른다 */
+export class HttpError extends Error {
+  readonly status: number;
+  constructor(status: number) {
+    super(`SSE 연결 실패: HTTP ${status}`);
+    this.status = status;
+  }
+}
+
 /** 스트림을 읽어 메시지가 완성될 때마다 onMessage 를 부른다. onActivity 는 하트비트 주석을 포함해 바이트가 올 때마다 불린다 */
 export async function connect(
   url: string,
@@ -32,7 +41,7 @@ export async function connect(
   onActivity?: () => void,
 ): Promise<void> {
   const res = await fetch(url, init);
-  if (!res.ok || !res.body) throw new Error(`SSE 연결 실패: HTTP ${res.status}`);
+  if (!res.ok || !res.body) throw new HttpError(res.status);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';

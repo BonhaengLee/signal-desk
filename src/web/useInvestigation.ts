@@ -7,7 +7,8 @@ import { subscribe, type SubscribeOptions } from '../client/subscribe.ts';
 import { DEMO, DemoError, demoDecide, demoStart, demoSubscribe } from './demo.ts';
 import { parseAuditEvent, summarizeInvestigation, type InvestigationView } from './investigation.ts';
 
-export type InvestigationStreamStatus = 'connecting' | 'open' | 'error';
+// error: 끊겨서 다시 붙는 중. notFound·failed: 다시 시도하지 않고 끝난 실패 (없는 조사 id, 데모 파일을 못 읽음 등)
+export type InvestigationStreamStatus = 'connecting' | 'open' | 'error' | 'notFound' | 'failed';
 
 export function useInvestigation(id: string | undefined): { view?: InvestigationView; status: InvestigationStreamStatus } {
   const [events, setEvents] = useState<AuditEvent[]>([]);
@@ -28,8 +29,9 @@ export function useInvestigation(id: string | undefined): { view?: Investigation
       },
     };
     // 조사 녹화는 재생을 멈춰도 계속 나온다 (조사를 누르면 화면이 자동으로 멈추기 때문)
-    if (DEMO) void demoSubscribe(url, opts, () => false);
-    else void subscribe(url, opts);
+    (DEMO ? demoSubscribe(url, opts, () => false) : subscribe(url, opts)).catch((e: unknown) => {
+      if (!ac.signal.aborted) setStatus((e as { status?: number }).status === 404 ? 'notFound' : 'failed');
+    });
     return () => ac.abort();
   }, [id]);
 

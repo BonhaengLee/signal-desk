@@ -6,7 +6,7 @@ import type { Action } from '../audit/store.ts';
 import type { Verdict } from '../agent/tools.ts';
 import { formatCall, formatResult, previewResult, type InvestigationView } from './investigation.ts';
 import { formatElapsed } from './derive.ts';
-import { ApiError, decideProposal, startInvestigation, useInvestigation } from './useInvestigation.ts';
+import { ApiError, decideProposal, startInvestigation, useInvestigation, type InvestigationStreamStatus } from './useInvestigation.ts';
 import { DEMO } from './demo.ts';
 import { Badge, Button, Card, EmptyState, VisuallyHidden, type Tone } from './ui/controls.tsx';
 import { OPERATOR_RE } from '../audit/rules.ts';
@@ -31,6 +31,15 @@ const PHASE: Record<InvestigationView['phase'], { label: string; tone: Tone }> =
   proposed: { label: '승인 대기', tone: 'warn' },
   decided: { label: '결정됨', tone: 'neutral' },
   failed: { label: '결론 없음', tone: 'error' },
+};
+
+/** 조사 기록이 아직 없을 때 연결 상태별 문구 */
+const STREAM_TITLE: Record<InvestigationStreamStatus, string> = {
+  connecting: '조사 기록을 불러오는 중',
+  open: '조사 기록을 불러오는 중',
+  error: '조사 기록에 다시 연결하는 중',
+  notFound: '조사 기록을 찾지 못했습니다',
+  failed: '조사 기록을 불러오지 못했습니다',
 };
 
 /** URL 의 ?inv= 를 읽고 쓴다. 다른 쿼리는 그대로 둔다 */
@@ -124,7 +133,7 @@ export function InvestigationPanel({
           {DEMO && '. 데모는 실제 모델로 T+02:00 시점에 돌린 조사를 재생하고, 승인·거절은 이 브라우저에만 반영됩니다'}
         </EmptyState>
       ) : !view ? (
-        <EmptyState title={status === 'error' ? '조사 기록에 다시 연결하는 중' : '조사 기록을 불러오는 중'} />
+        <EmptyState title={STREAM_TITLE[status]}>{status === 'notFound' || status === 'failed' ? '다시 조사를 누르면 새로 시작합니다' : undefined}</EmptyState>
       ) : (
         <InvestigationBody view={view} />
       )}

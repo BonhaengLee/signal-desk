@@ -24,6 +24,8 @@ type Recording = { id: string; scenario: string; events: AuditEvent[] };
 const json = async <T>(path: string): Promise<T> => {
   const res = await fetch(`${BASE}/${path}`);
   if (!res.ok) throw new DemoError(res.status, `데모 파일을 읽지 못했습니다 (${res.status})`);
+  // 없는 파일에 index.html 을 200 으로 주는 호스트가 있다 (vite preview 등). 그러면 없는 것으로 본다
+  if (!res.headers.get('content-type')?.includes('json')) throw new DemoError(404, '데모 파일이 없습니다');
   return (await res.json()) as T;
 };
 
@@ -96,6 +98,8 @@ export async function demoSubscribe(url: string, opts: SubscribeOptions, isPause
     return;
   }
 
+  // 서버도 모르는 주소는 404 로 답한다. 조사 id 가 uuid 모양이 아니면 여기로 온다
+  if (u.pathname !== '/events') throw new DemoError(404, '없는 조사');
   const scenario = u.searchParams.get('scenario') ?? 'deploy-regression';
   const speed = Number(u.searchParams.get('speed') ?? 1);
   const demo = await json<Demo>(`events/${scenario}.json`);

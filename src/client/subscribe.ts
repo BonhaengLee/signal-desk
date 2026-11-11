@@ -1,7 +1,7 @@
 // SSE 구독: 끊기면 다시 붙고, 마지막으로 받은 id 다음부터 이어 받고, 이미 받은 메시지는 거른다.
 // 서버는 Last-Event-ID 다음부터 보내 주지만, 그 약속이 깨져도(프록시 재전송 등) 화면에 중복이 생기지 않게 클라이언트에서도 거른다.
 
-import { connect, type SseMessage } from './sse.ts';
+import { connect, HttpError, type SseMessage } from './sse.ts';
 
 export type SubscribeStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
 
@@ -31,6 +31,11 @@ function defaultSleep(ms: number, signal: AbortSignal): Promise<void> {
       resolve();
     });
   });
+}
+
+/** 다시 요청해도 답이 같은 실패 (없는 조사, 잘못된 쿼리). 408·429 는 기다리면 풀리므로 다시 시도한다 */
+export function isPermanent(e: unknown): e is HttpError {
+  return e instanceof HttpError && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
 }
 
 /** 지수 백오프: 1s, 2s, 4s … 상한에서 멈춘다. 메시지를 하나라도 받으면 처음으로 돌아간다 */
@@ -81,8 +86,10 @@ export async function subscribe(url: string, opts: SubscribeOptions): Promise<vo
         { signal: attempt$.signal, headers: lastId ? { 'Last-Event-ID': lastId } : {} },
         kick,
       );
-    } catch {
-      // 네트워크 오류·HTTP 오류·조용한 연결 모두 재연결 대상. 끊으라는 요청이면 아래에서 빠져나간다
+    } catch (e) {
+      // 네트워크 오류·5xx·조용한 연결은 재연결 대상. 끊으라는 요청이면 아래에서 빠져나간다.
+      // 4xx 는 다시 붙어도 같은 답이라 호출한 쪽에 실패로 넘긴다 (없는 조사 id 로 영원히 재시도하지 않게)
+      if (isPermanent(e) && !signal.aborted) throw e;
     } finally {
       clearTimeout(idle);
       signal.removeEventListener('abort', forward);

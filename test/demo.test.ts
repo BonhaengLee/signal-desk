@@ -5,6 +5,7 @@ import { demoDecide, demoStart, demoSubscribe, pausableClock, playbackGaps, STEP
 import { demoEvents } from '../scripts/build-demo.ts';
 import { readFileSync } from 'node:fs';
 
+const JSON_HEADERS = new Headers({ 'content-type': 'application/json' });
 const at = (s: number): AuditEvent => ({ seq: s, at: new Date(Date.UTC(2026, 0, 1, 0, 0, s)).toISOString(), actor: 'agent', kind: 'tool_call', payload: {} });
 
 test('녹화 재생 간격: 실제 간격을 0.5~1.5초 안으로 줄인다', () => {
@@ -36,7 +37,7 @@ test('데모 이벤트 파일에는 시나리오 정답과 설명이 들어가�
 
 test('데모 녹화는 녹화 시점 전에 누르면 시작하지 않는다', async () => {
   const real = globalThis.fetch;
-  globalThis.fetch = (async () => ({ ok: true, json: async () => ({ 'db-degradation': { id: 'rec-1', atSec: 120 } }) })) as unknown as typeof fetch;
+  globalThis.fetch = (async () => ({ ok: true, headers: JSON_HEADERS, json: async () => ({ 'db-degradation': { id: 'rec-1', atSec: 120 } }) })) as unknown as typeof fetch;
   try {
     const early = await demoStart('db-degradation', 90).catch((e: { status: number; message: string }) => `${e.status} ${e.message}`);
     assert.deepEqual(
@@ -68,7 +69,7 @@ test('데모 재생은 멈춘 동안 이벤트를 내보내지 않고, 풀면 �
   const realLocation = g.location;
   // 1초마다 이벤트 하나, 10초짜리 시나리오
   const events = Array.from({ length: 10 }, (_, i) => ({ simSec: i, event: { seq: i } }));
-  globalThis.fetch = (async () => ({ ok: true, json: async () => ({ durationSec: 10, events }) })) as unknown as typeof fetch;
+  globalThis.fetch = (async () => ({ ok: true, headers: JSON_HEADERS, json: async () => ({ durationSec: 10, events }) })) as unknown as typeof fetch;
   g.location = { origin: 'http://demo.test' };
   const ac = new AbortController();
   const got: string[] = [];
@@ -88,5 +89,36 @@ test('데모 재생은 멈춘 동안 이벤트를 내보내지 않고, 풀면 �
     await done;
     globalThis.fetch = realFetch;
     g.location = realLocation;
+  }
+});
+
+test('데모 조사 주소가 uuid 모양이 아니면 시나리오 재생으로 빠지지 않고 404 로 끝난다', async () => {
+  const realFetch = globalThis.fetch;
+  const g = globalThis as { location?: unknown };
+  const realLocation = g.location;
+  let fetched = 0;
+  globalThis.fetch = (async () => (fetched++, { ok: true, headers: JSON_HEADERS, json: async () => ({ durationSec: 10, events: [] }) })) as unknown as typeof fetch;
+  g.location = { origin: 'http://demo.test' };
+  try {
+    // 시간 제한: 재생 루프로 빠지면 끝나지 않으므로 200ms 뒤 끊어 'resolved' 로 드러나게 한다
+    const result = await demoSubscribe('/investigations/not-a-uuid/stream', { signal: AbortSignal.timeout(200), onMessage: () => {} }, () => false).then(
+      () => 'resolved',
+      (e: { status: number }) => `rejected ${e.status}`,
+    );
+    assert.deepEqual([result, fetched], ['rejected 404', 0]);
+  } finally {
+    globalThis.fetch = realFetch;
+    g.location = realLocation;
+  }
+});
+
+test('없는 데모 파일에 index.html 을 200 으로 주는 호스트에서도 404 로 본다', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => ({ ok: true, headers: new Headers({ 'content-type': 'text/html' }), json: async () => JSON.parse('<!doctype html>') })) as unknown as typeof fetch;
+  try {
+    const result = await demoStart('db-degradation', 999).catch((e: { status: number }) => e.status);
+    assert.equal(result, 404);
+  } finally {
+    globalThis.fetch = realFetch;
   }
 });
