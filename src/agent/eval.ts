@@ -2,6 +2,7 @@
 // 사용법: node --env-file=.env.local src/agent/eval.ts [시드 수] [모델] [실행 간격 ms]
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { simulate, type Scenario } from '../simulator/simulate.ts';
 import { investigate, openAiChat, type ChatFn } from './agent.ts';
 import { firstAlertBaseline, latestDeployBaseline } from './baseline.ts';
@@ -43,7 +44,26 @@ export interface Row {
   stopReason?: string; // submitted, max_steps, no_tool_call
   formatRejects?: number; // 형식이 틀려 돌려보낸 제출 수
   trace?: string[]; // 단계 기록. 결과가 왜 바뀌었는지 다시 돌리지 않고 보려고 남긴다 (모델 출력은 매번 달라 재실행은 다른 표본이다)
+  version?: string; // 이 행을 만든 코드의 codeVersion. 없으면 버전을 남기기 전의 결과
 }
+
+/** 결과에 영향을 주는 파일 내용의 해시(12자리). 이전 결과는 이 값이 같을 때만 다시 쓴다.
+ *  커밋 해시 대신 내용 해시를 쓰는 이유: 커밋하지 않은 수정으로 돌린 결과도 구분해야 한다 */
+export function codeVersion(paths: readonly string[]): string {
+  const h = createHash('sha256');
+  for (const p of [...paths].sort()) h.update(p).update('\0').update(readFileSync(p)).update('\0');
+  return h.digest('hex').slice(0, 12);
+}
+
+/** 시뮬레이터 평가 결과를 바꿀 수 있는 파일: 지시문·도구·채점·기준선·시뮬레이터·시나리오 */
+export const SIM_EVAL_FILES = [
+  'src/agent/agent.ts',
+  'src/agent/tools.ts',
+  'src/agent/eval.ts',
+  'src/agent/baseline.ts',
+  'src/simulator/simulate.ts',
+  ...SCENARIOS.map((n) => `scenarios/${n}.json`),
+];
 
 /** 단계 한 줄: get_metric(payment-db, latency_p99) 또는 submit_root_cause ✖ 오류 */
 export function traceLine(tool: string, args: Record<string, unknown>, result: unknown): string {
@@ -55,7 +75,8 @@ export function traceLine(tool: string, args: Record<string, unknown>, result: u
 }
 
 export interface EvalOptions {
-  prev?: Row[]; // 이전 실행 결과. 측정된 건은 다시 돌리지 않는다 (무료 쿼터 절약)
+  prev?: Row[]; // 이전 실행 결과. 같은 코드 버전으로 측정된 건은 다시 돌리지 않는다 (무료 쿼터 절약)
+  version?: string; // 지금 코드의 codeVersion. 다른 버전으로 잰 행은 다시 쓰지 않는다
   pauseMs?: number; // 실행 사이 간격. Groq 무료 키는 분당 8,000토큰이고 조사 1건이 6천 토큰 안팎이라 65초
   onRow?: (rows: Row[]) => void;
 }
@@ -66,7 +87,7 @@ export async function evaluate(chat: ChatFn, seeds: number[], opts: EvalOptions 
   for (const name of SCENARIOS) {
     const scenario = JSON.parse(readFileSync(`scenarios/${name}.json`, 'utf8')) as Scenario;
     for (const seed of seeds) {
-      const done = opts.prev?.find((r) => r.scenario === name && r.seed === seed && r.measured);
+      const done = opts.prev?.find((r) => r.scenario === name && r.seed === seed && r.measured && r.version === opts.version);
       if (done) {
         rows.push(done);
         continue;
@@ -107,6 +128,7 @@ export async function evaluate(chat: ChatFn, seeds: number[], opts: EvalOptions 
         stopReason,
         formatRejects: trace.filter((l) => l.startsWith('submit_root_cause ✖')).length,
         trace,
+        version: opts.version,
       });
       console.error(`${name} seed=${seed} agent=${agent} base=${rows.at(-1)!.baseline}`);
       opts.onRow?.(rows); // 중간에 끊겨도 끝난 건은 남긴다
@@ -133,8 +155,9 @@ export function summarize(rows: Row[]): string {
     const ms = rs.filter((r) => r.measured);
     const avg = (f: (r: Row) => number) => (ms.length ? ms.reduce((a, r) => a + f(r), 0) / ms.length : NaN).toFixed(1);
     const lost = n - ms.length;
+    // 규칙도 에이전트를 측정한 건만 센다. 분모가 다르면 같은 표 안에서 비교가 어긋난다
     lines.push(
-      `| ${g} | ${ms.filter((r) => r.agentOk).length}/${ms.length}${lost ? ` (측정 불가 ${lost})` : ''} | ${rs.filter((r) => r.baselineOk).length}/${n} | ${rs.filter((r) => r.firstAlertOk).length}/${n} | ${avg((r) => r.steps)} | ${avg((r) => r.ms / 1000)} | ${known(ms, (r) => (r.stopReason === undefined ? undefined : r.stopReason === 'max_steps' ? 1 : 0))} | ${known(ms, (r) => r.formatRejects)} |`,
+      `| ${g} | ${ms.filter((r) => r.agentOk).length}/${ms.length}${lost ? ` (측정 불가 ${lost})` : ''} | ${ms.filter((r) => r.baselineOk).length}/${ms.length} | ${ms.filter((r) => r.firstAlertOk).length}/${ms.length} | ${avg((r) => r.steps)} | ${avg((r) => r.ms / 1000)} | ${known(ms, (r) => (r.stopReason === undefined ? undefined : r.stopReason === 'max_steps' ? 1 : 0))} | ${known(ms, (r) => r.formatRejects)} |`,
     );
   }
   return lines.join('\n');
@@ -150,6 +173,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const prev: Row[] = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).map((r: Row) => ({ ...r, measured: r.measured ?? !r.agent.startsWith('오류') })) : [];
   const save = (rows: Row[]) => writeFileSync(file, JSON.stringify(rows, null, 2) + '\n');
   const seeds = Array.from({ length: n }, (_, i) => i + 1);
-  const rows = await evaluate(openAiChat(LLM_BASE_URL, LLM_API_KEY, model), seeds, { prev, pauseMs: Number(process.argv[4] ?? 65_000), onRow: save });
-  console.log(`모델: ${model}, 시드 ${n}개\n\n${summarize(rows)}`);
+  const version = codeVersion(SIM_EVAL_FILES);
+  const rows = await evaluate(openAiChat(LLM_BASE_URL, LLM_API_KEY, model), seeds, { prev, version, pauseMs: Number(process.argv[4] ?? 65_000), onRow: save });
+  console.log(`모델: ${model}, 시드 ${n}개, 코드 버전 ${version}\n\n${summarize(rows)}`);
 }

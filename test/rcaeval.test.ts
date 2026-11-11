@@ -71,3 +71,14 @@ test('순위 도구: 평소 거의 안 움직이던 지표의 미세한 변화(�
   const ranked = (runTool(ctx, 'rank_anomalies', {}) as { service: string }[]).map((r) => r.service);
   assert.deepEqual(ranked, ['checkoutservice', 'emailservice']);
 });
+
+test('afterSec 을 주면 조사 구간이 주입 뒤 그 초에서 끝난다 (기본 300초)', () => {
+  const { text, inject } = csv();
+  const lastSec = (afterSec?: number) => {
+    const c = loadCase('adservice_cpu/1', text, inject, afterSec);
+    const last = Math.max(...c.ctx.events.map((e) => e.at.getTime()));
+    return (last - c.ctx.startMs) / 1000 - c.injectSec;
+  };
+  // 10초 평균 구간의 시작 시각이 찍히므로 마지막 이벤트는 끝 10초 전 구간이다
+  assert.deepEqual([lastSec(), lastSec(60)], [290, 50]);
+});

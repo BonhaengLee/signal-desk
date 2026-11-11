@@ -57,7 +57,8 @@ const std = (xs: number[]) => {
 };
 
 /** csv 본문과 주입 시각(유닉스 초)으로 한 건을 만든다 */
-export function loadCase(name: string, csv: string, injectTime: number): RcaCase {
+/** afterSec: 조사 구간 끝을 주입 뒤 몇 초로 둘지. 평가는 AFTER_SEC(300초), 짧게 주면 '주입 직후에 조사를 연' 상황이다 */
+export function loadCase(name: string, csv: string, injectTime: number, afterSec = AFTER_SEC): RcaCase {
   const [dir] = name.split('/');
   const [rootCause, fault] = dir!.split('_') as [string, string];
   const lines = csv.trim().split('\n');
@@ -74,7 +75,7 @@ export function loadCase(name: string, csv: string, injectTime: number): RcaCase
   const firstTime = Number(lines[1]!.split(',')[timeCol]);
   const beforeSec = Math.min(MAX_BEFORE_SEC, Math.floor((injectTime - firstTime) / STEP_SEC) * STEP_SEC);
   const start = injectTime - beforeSec;
-  const end = injectTime + AFTER_SEC;
+  const end = injectTime + afterSec;
   const series = new Map<number, number[]>(); // 컬럼 → 10초 평균 값들 (구간 순서대로)
   const sums = new Map<string, { sum: number; n: number }>();
   for (const line of lines.slice(1)) {

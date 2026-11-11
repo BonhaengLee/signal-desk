@@ -5,6 +5,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { investigate, openAiChat, type ChatFn } from '../agent/agent.ts';
+import { codeVersion } from '../agent/eval.ts';
 import { firstAlertBaseline } from '../agent/baseline.ts';
 import { rankAnomalies } from '../agent/tools.ts';
 import { largestShiftBaseline, loadCase, RCA_HYBRID_TOOLS, RCA_TOOLS, type RcaCase } from './load.ts';
@@ -29,7 +30,11 @@ export interface RcaRow {
   rankTopOk?: boolean;
   steps: number;
   ms: number;
+  version?: string; // 이 행을 만든 코드의 codeVersion. 없으면 버전을 남기기 전의 결과
 }
+
+/** RCAEval 결과를 바꿀 수 있는 파일: 지시문·도구·기준선·데이터 변환·채점 */
+export const RCA_EVAL_FILES = ['src/agent/agent.ts', 'src/agent/tools.ts', 'src/agent/baseline.ts', 'src/rcaeval/load.ts', 'src/rcaeval/eval.ts'];
 
 export function listCases(run: number): string[] {
   return readdirSync(DATA_DIR)
@@ -38,16 +43,20 @@ export function listCases(run: number): string[] {
     .map((d) => `${d}/${run}`);
 }
 
-export function readCase(name: string): RcaCase {
+export function readCase(name: string, afterSec?: number): RcaCase {
   const dir = `${DATA_DIR}/${name}`;
-  return loadCase(name, readFileSync(`${dir}/data.csv`, 'utf8'), Number(readFileSync(`${dir}/inject_time.txt`, 'utf8')));
+  return loadCase(name, readFileSync(`${dir}/data.csv`, 'utf8'), Number(readFileSync(`${dir}/inject_time.txt`, 'utf8')), afterSec);
 }
 
-export async function evaluateRca(chat: ChatFn, names: string[], opts: { mode?: RcaMode; prev?: RcaRow[]; pauseMs?: number; onRow?: (rows: RcaRow[]) => void } = {}) {
+export async function evaluateRca(
+  chat: ChatFn,
+  names: string[],
+  opts: { mode?: RcaMode; prev?: RcaRow[]; version?: string; pauseMs?: number; onRow?: (rows: RcaRow[]) => void } = {},
+) {
   const rows: RcaRow[] = [];
   let ran = 0;
   for (const name of names) {
-    const done = opts.prev?.find((r) => r.case === name && r.measured);
+    const done = opts.prev?.find((r) => r.case === name && r.measured && r.version === opts.version);
     if (done) {
       rows.push(done);
       continue;
@@ -85,6 +94,7 @@ export async function evaluateRca(chat: ChatFn, names: string[], opts: { mode?: 
       rankTopOk: rankTop === c.rootCause,
       steps,
       ms: Math.round(performance.now() - t0),
+      version: opts.version,
     });
     console.error(`${name} agent=${agent} first=${first} shift=${shift} rank=${rankTop} answer=${c.rootCause}`);
     opts.onRow?.(rows);
@@ -100,7 +110,8 @@ export function summarizeRca(rows: RcaRow[]): string {
     const lost = rs.length - m.length;
     const steps = m.length ? (m.reduce((a, r) => a + r.steps, 0) / m.length).toFixed(1) : '-';
     lines.push(
-      `| ${g} | ${m.filter((r) => r.agentOk).length}/${m.length}${lost ? ` (측정 불가 ${lost})` : ''} | ${rs.filter((r) => r.firstAlertOk).length}/${rs.length} | ${rs.filter((r) => r.largestShiftOk).length}/${rs.length} | ${rs.filter((r) => r.rankTopOk).length}/${rs.length} | ${steps} |`,
+      // 규칙도 에이전트를 측정한 건만 센다. 분모가 다르면 같은 표 안에서 비교가 어긋난다
+      `| ${g} | ${m.filter((r) => r.agentOk).length}/${m.length}${lost ? ` (측정 불가 ${lost})` : ''} | ${m.filter((r) => r.firstAlertOk).length}/${m.length} | ${m.filter((r) => r.largestShiftOk).length}/${m.length} | ${m.filter((r) => r.rankTopOk).length}/${m.length} | ${steps} |`,
     );
   }
   return lines.join('\n');
@@ -119,9 +130,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   mkdirSync('eval', { recursive: true });
   const prev: RcaRow[] = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : [];
   const names = listCases(run).slice(0, limit);
+  const version = codeVersion(RCA_EVAL_FILES);
   const rows = await evaluateRca(openAiChat(LLM_BASE_URL, LLM_API_KEY, model), names, {
     mode,
     prev,
+    version,
     pauseMs,
     onRow: (rs) => writeFileSync(file, JSON.stringify([...rs, ...prev.filter((p) => !rs.some((r) => r.case === p.case))], null, 2) + '\n'),
   });

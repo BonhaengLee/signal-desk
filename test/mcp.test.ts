@@ -35,7 +35,16 @@ test('load_incident 전에 조사 도구를 부르면 오류', async () => {
 test('MCP 로 받은 결과가 에이전트가 받는 결과와 같고, 정답은 새지 않는다', async () => {
   const client = await connected();
   const loaded = await client.callTool({ name: 'load_incident', arguments: { scenario: 'silent-db', seed: 2 } });
-  assert.equal(JSON.stringify(body(loaded)).includes('rootCause'), false);
+  const scenario0 = JSON.parse(readFileSync('scenarios/silent-db.json', 'utf8')) as Scenario;
+  // 응답 전체를 고정한다. 정답(rootCause)과 원인을 적은 설명(description)이 들어가면 바로 실패한다
+  assert.deepEqual(body(loaded), {
+    scenario: 'silent-db',
+    seed: 2,
+    untilSec: scenario0.durationSec,
+    events: contextFor(scenario0, 2).events.length,
+    entry: scenario0.entry,
+    description: '조사 시작. 정답은 숨김',
+  });
 
   const scenario = JSON.parse(readFileSync('scenarios/silent-db.json', 'utf8')) as Scenario;
   const ctx = contextFor(scenario, 2);
