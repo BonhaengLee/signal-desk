@@ -4,9 +4,9 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { Action } from '../audit/store.ts';
 import type { Verdict } from '../agent/tools.ts';
-import { formatCall, formatResult, previewResult, type InvestigationView } from './investigation.ts';
+import { formatCall, formatResult, previewResult, startBlockedReason, type InvestigationView } from './investigation.ts';
 import { formatElapsed } from './derive.ts';
-import { ApiError, decideProposal, startInvestigation, useInvestigation, type InvestigationStreamStatus } from './useInvestigation.ts';
+import { ApiError, decideProposal, startInvestigation, useInvestigation, useReadyAt, type InvestigationStreamStatus } from './useInvestigation.ts';
 import { DEMO } from './demo.ts';
 import { Badge, Button, Card, EmptyState, VisuallyHidden, type Tone } from './ui/controls.tsx';
 import { OPERATOR_RE } from '../audit/rules.ts';
@@ -74,6 +74,9 @@ export function InvestigationPanel({
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
   const { view, status } = useInvestigation(id);
+  const readyAt = useReadyAt(scenario);
+  const blocked = startBlockedReason(alerted, nowSec, readyAt);
+  const blockedId = useId();
 
   useEffect(() => writeInv(id), [id]);
 
@@ -112,8 +115,9 @@ export function InvestigationPanel({
         <Button
           variant="primary"
           onClick={start}
-          disabled={starting || !alerted}
-          title={alerted ? `${formatElapsed(Math.floor(nowSec))} 까지의 기록으로 조사합니다. 화면 재생도 이 시점에서 멈춥니다` : '경보가 울리면 조사할 수 있습니다'}
+          disabled={starting || blocked !== undefined}
+          aria-describedby={blocked ? blockedId : undefined}
+          title={blocked ?? `${formatElapsed(Math.floor(nowSec))} 까지의 기록으로 조사합니다. 화면 재생도 이 시점에서 멈춥니다`}
         >
           {starting ? '시작하는 중…' : id ? '다시 조사' : '지금 시점까지 조사'}
         </Button>
@@ -121,6 +125,12 @@ export function InvestigationPanel({
       className={`${s.card} area-inv`}
       bodyClassName={s.body}
     >
+      {/* 버튼이 꺼진 이유. 꺼진 버튼의 title 은 브라우저에 따라 안 보여서 본문에 쓴다 (다시 조사 버튼이 꺼진 때도) */}
+      {blocked && (
+        <p id={blockedId} className={`${s.hint} ${s.blocked}`}>
+          {blocked}
+        </p>
+      )}
       {error && (
         <p className={s.error} role="alert">
           {error}
@@ -128,9 +138,8 @@ export function InvestigationPanel({
       )}
       {!id ? (
         <EmptyState title={alerted ? '아직 조사하지 않았습니다' : '경보를 기다리는 중'}>
-          {alerted ? '' : '경보가 울리면 조사할 수 있습니다. '}
           에이전트는 누른 시점까지의 경보·지표·로그·배포만 보고 원인과 조치를 제안합니다. 조치는 사람이 승인해야 실행됩니다
-          {DEMO && '. 데모는 실제 모델로 T+02:00 시점에 돌린 조사를 재생하고, 승인·거절은 이 브라우저에만 반영됩니다'}
+          {DEMO && typeof readyAt === 'number' && `. 데모는 실제 모델로 ${formatElapsed(readyAt)} 시점에 돌린 조사를 재생하고, 승인·거절은 이 브라우저에만 반영됩니다`}
         </EmptyState>
       ) : !view ? (
         <EmptyState title={STREAM_TITLE[status]}>{status === 'notFound' || status === 'failed' ? '다시 조사를 누르면 새로 시작합니다' : undefined}</EmptyState>

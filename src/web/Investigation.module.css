@@ -217,6 +217,9 @@ a.stepRef:focus-visible {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
+.blocked {
+  margin: 0;
+}
 
 .buttons {
   display: flex;

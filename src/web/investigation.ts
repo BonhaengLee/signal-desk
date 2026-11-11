@@ -3,6 +3,7 @@
 
 import type { Action, AuditEvent, ProposalStatus } from '../audit/store.ts';
 import type { Verdict } from '../agent/tools.ts';
+import { formatElapsed } from './derive.ts';
 
 export interface InvestigationStep {
   seq: number;
@@ -114,4 +115,16 @@ export function formatResult(result: unknown): string {
   if (Object.keys(r).length > 0 && Object.values(r).some(Array.isArray))
     return `{\n${Object.entries(r).map(([k, v]) => `  ${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(',\n')}\n}`;
   return JSON.stringify(result, null, 2) ?? '';
+}
+
+/**
+ * 조사 버튼을 끌 이유. 누를 수 있으면 undefined.
+ * readyAt: 조사를 시작할 수 있는 시점(초). 서버 모드는 0, 데모는 녹화 시점. undefined 는 녹화 정보를 읽는 중, null 은 녹화 없음
+ */
+export function startBlockedReason(alerted: boolean, nowSec: number, readyAt: number | null | undefined): string | undefined {
+  if (!alerted) return '경보가 울리면 조사할 수 있습니다';
+  if (readyAt === undefined) return '데모 녹화 정보를 불러오는 중입니다';
+  if (readyAt === null) return '이 시나리오는 데모 녹화를 찾지 못했습니다';
+  if (nowSec < readyAt) return `${formatElapsed(readyAt)}부터 누를 수 있습니다`;
+  return undefined;
 }

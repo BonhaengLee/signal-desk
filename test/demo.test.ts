@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AuditEvent } from '../src/audit/store.ts';
-import { demoDecide, demoStart, demoSubscribe, pausableClock, playbackGaps, STEP_MAX_MS, STEP_MIN_MS } from '../src/web/demo.ts';
+import { demoDecide, demoReadyAt, demoStart, demoSubscribe, pausableClock, playbackGaps, STEP_MAX_MS, STEP_MIN_MS } from '../src/web/demo.ts';
 import { demoEvents } from '../scripts/build-demo.ts';
 import { readFileSync } from 'node:fs';
 
@@ -118,6 +118,16 @@ test('없는 데모 파일에 index.html 을 200 으로 주는 호스트에서�
   try {
     const result = await demoStart('db-degradation', 999).catch((e: { status: number }) => e.status);
     assert.equal(result, 404);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('데모 녹화 시점은 녹화 목록(index.json)에서 읽고, 녹화가 없으면 undefined', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => ({ ok: true, headers: JSON_HEADERS, json: async () => ({ 'db-degradation': { id: 'rec-1', atSec: 95 } }) })) as unknown as typeof fetch;
+  try {
+    assert.deepEqual([await demoReadyAt('db-degradation'), await demoReadyAt('retry-storm')], [95, undefined]);
   } finally {
     globalThis.fetch = realFetch;
   }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AuditEvent } from '../src/audit/store.ts';
-import { formatCall, formatResult, parseAuditEvent, previewResult, summarizeInvestigation } from '../src/web/investigation.ts';
+import { formatCall, formatResult, parseAuditEvent, previewResult, startBlockedReason, summarizeInvestigation } from '../src/web/investigation.ts';
 
 const ev = (seq: number, kind: AuditEvent['kind'], payload: unknown, actor: AuditEvent['actor'] = 'agent'): AuditEvent => ({
   seq,
@@ -83,4 +83,25 @@ test('펼친 결과: 배열은 항목 하나를 한 줄로, 지표 표는 열 �
 test('조사 시작 기록의 atSec 을 보여 준다 (없으면 전체 기록)', () => {
   const at = summarizeInvestigation([ev(1, 'investigation_started', { scenario: 'silent-db', seed: 42, model: 'm', atSec: 120 }, 'system')]);
   assert.deepEqual([at.atSec, summarizeInvestigation(base).atSec], [120, undefined]);
+});
+
+test('조사 버튼: 경보 전, 녹화 정보 읽는 중, 녹화 없음, 녹화 시점 전에는 끄고 이유를 준다', () => {
+  assert.deepEqual(
+    [
+      startBlockedReason(false, 200, 0),
+      startBlockedReason(true, 200, undefined),
+      startBlockedReason(true, 200, null),
+      startBlockedReason(true, 119, 120),
+      startBlockedReason(true, 120, 120),
+      startBlockedReason(true, 5, 0), // 서버 모드: 경보만 울리면 언제든
+    ],
+    [
+      '경보가 울리면 조사할 수 있습니다',
+      '데모 녹화 정보를 불러오는 중입니다',
+      '이 시나리오는 데모 녹화를 찾지 못했습니다',
+      'T+02:00부터 누를 수 있습니다',
+      undefined,
+      undefined,
+    ],
+  );
 });

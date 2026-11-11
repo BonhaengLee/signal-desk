@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AuditEvent } from '../audit/store.ts';
 import { subscribe, type SubscribeOptions } from '../client/subscribe.ts';
-import { DEMO, DemoError, demoDecide, demoStart, demoSubscribe } from './demo.ts';
+import { DEMO, DemoError, demoDecide, demoReadyAt, demoStart, demoSubscribe } from './demo.ts';
 import { parseAuditEvent, summarizeInvestigation, type InvestigationView } from './investigation.ts';
 
 // error: 끊겨서 다시 붙는 중. notFound·failed: 다시 시도하지 않고 끝난 실패 (없는 조사 id, 데모 파일을 못 읽음 등)
@@ -37,6 +37,24 @@ export function useInvestigation(id: string | undefined): { view?: Investigation
 
   const view = useMemo(() => (id && events.length > 0 ? summarizeInvestigation(events) : undefined), [id, events]);
   return { view, status };
+}
+
+/** 조사를 시작할 수 있는 시점(초). 서버 모드는 언제나 0. 데모는 녹화 시점이고, 읽는 중이면 undefined, 녹화가 없거나 못 읽으면 null */
+export function useReadyAt(scenario: string): number | null | undefined {
+  const [readyAt, setReadyAt] = useState<number | null | undefined>(DEMO ? undefined : 0);
+  useEffect(() => {
+    if (!DEMO) return;
+    let live = true;
+    setReadyAt(undefined);
+    demoReadyAt(scenario).then(
+      (sec) => live && setReadyAt(sec ?? null),
+      () => live && setReadyAt(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [scenario]);
+  return readyAt;
 }
 
 /** 요청 실패를 화면 문장으로. 조사 API 가 꺼져 있으면 서버가 404 를 준다 (LLM 키가 없을 때) */

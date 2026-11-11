@@ -9,6 +9,7 @@ import type { AuditEvent } from '../audit/store.ts';
 import { decisionInputError } from '../audit/rules.ts';
 import type { SseMessage } from '../client/sse.ts';
 import type { SubscribeOptions } from '../client/subscribe.ts';
+import { formatElapsed } from './derive.ts';
 
 // Node 테스트에는 import.meta.env 가 없다
 export const DEMO = import.meta.env?.VITE_DEMO === '1';
@@ -128,15 +129,19 @@ export async function demoSubscribe(url: string, opts: SubscribeOptions, isPause
   }
 }
 
+const recording = async (scenario: string) =>
+  (await json<Record<string, { id: string; atSec: number } | undefined>>('investigations/index.json'))[scenario];
+
+/** 이 시나리오의 녹화를 쓸 수 있는 시점(초). 녹화가 없으면 undefined. 화면은 이 값으로 그 전까지 조사 버튼을 끈다 */
+export async function demoReadyAt(scenario: string): Promise<number | undefined> {
+  return (await recording(scenario))?.atSec;
+}
+
 /** 이 시나리오의 녹화 id. 녹화는 정해진 시점(atSec)까지의 기록으로 돌린 조사라, 재생이 그 시점 전이면 아직 쓸 수 없다 */
 export async function demoStart(scenario: string, nowSec: number): Promise<string> {
-  const index = await json<Record<string, { id: string; atSec: number }>>('investigations/index.json');
-  const rec = index[scenario];
+  const rec = await recording(scenario);
   if (!rec) throw new DemoError(404, `${scenario} 는 데모 녹화가 없습니다`);
-  if (nowSec < rec.atSec) {
-    const mmss = `${String(Math.floor(rec.atSec / 60)).padStart(2, '0')}:${String(rec.atSec % 60).padStart(2, '0')}`;
-    throw new DemoError(409, `데모 녹화는 T+${mmss} 시점까지의 기록으로 돌린 조사입니다. 재생이 그 시점을 지나면 다시 눌러 주세요`);
-  }
+  if (nowSec < rec.atSec) throw new DemoError(409, `데모 녹화는 ${formatElapsed(rec.atSec)} 시점까지의 기록으로 돌린 조사입니다. 재생이 그 시점을 지나면 다시 눌러 주세요`);
   return rec.id;
 }
 
