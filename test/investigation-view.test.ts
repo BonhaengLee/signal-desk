@@ -85,17 +85,22 @@ test('조사 시작 기록의 atSec 을 보여 준다 (없으면 전체 기록)'
   assert.deepEqual([at.atSec, summarizeInvestigation(base).atSec], [120, undefined]);
 });
 
-test('조사 버튼: 경보 전, 녹화 정보 읽는 중, 녹화 없음, 녹화 시점 전에는 끄고 이유를 준다', () => {
+test('조사 버튼: 승인 대기 제안, 경보 전, 녹화 정보 읽는 중, 녹화 없음, 녹화 시점 전에는 끄고 이유를 준다', () => {
+  const at = (alerted: boolean, nowSec: number, readyAt: number | null | undefined, pendingProposal = false) => startBlockedReason({ alerted, nowSec, readyAt, pendingProposal });
   assert.deepEqual(
     [
-      startBlockedReason(false, 200, 0),
-      startBlockedReason(true, 200, undefined),
-      startBlockedReason(true, 200, null),
-      startBlockedReason(true, 119, 120),
-      startBlockedReason(true, 120, 120),
-      startBlockedReason(true, 5, 0), // 서버 모드: 경보만 울리면 언제든
+      at(true, 200, 0, true),
+      at(false, 200, 0, true), // 처음으로 돌아가 경보가 없어도 대기 제안이 먼저
+      at(false, 200, 0),
+      at(true, 200, undefined),
+      at(true, 200, null),
+      at(true, 119, 120),
+      at(true, 120, 120),
+      at(true, 5, 0), // 서버 모드: 경보만 울리면 언제든
     ],
     [
+      '승인 대기 중인 제안을 먼저 승인하거나 거절하세요',
+      '승인 대기 중인 제안을 먼저 승인하거나 거절하세요',
       '경보가 울리면 조사할 수 있습니다',
       '데모 녹화 정보를 불러오는 중입니다',
       '이 시나리오는 데모 녹화를 찾지 못했습니다',

@@ -75,7 +75,7 @@ export function InvestigationPanel({
   const [error, setError] = useState<string>();
   const { view, status } = useInvestigation(id);
   const readyAt = useReadyAt(scenario);
-  const blocked = startBlockedReason(alerted, nowSec, readyAt);
+  const blocked = startBlockedReason({ alerted, nowSec, readyAt, pendingProposal: view?.proposal?.status === 'pending' });
   const blockedId = useId();
 
   useEffect(() => writeInv(id), [id]);
@@ -290,7 +290,7 @@ function ProposalBox({ proposal }: { proposal: NonNullable<InvestigationView['pr
         </h3>
         <p className={s.decidedBy}>
           {proposal.decidedBy} 님이 결정{proposal.reason && <> · 사유: {proposal.reason}</>}
-          {proposal.status === 'executed' && ' · 실제 조치는 데모라 실행 기록만 남깁니다'}
+          {proposal.status === 'executed' && ' · 실제 시스템과 연결하지 않아 실행 기록만 남깁니다'}
         </p>
       </section>
     );

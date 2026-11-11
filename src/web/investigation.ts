@@ -120,8 +120,11 @@ export function formatResult(result: unknown): string {
 /**
  * 조사 버튼을 끌 이유. 누를 수 있으면 undefined.
  * readyAt: 조사를 시작할 수 있는 시점(초). 서버 모드는 0, 데모는 녹화 시점. undefined 는 녹화 정보를 읽는 중, null 은 녹화 없음
+ * pendingProposal: 지금 보는 조사에 승인 대기 제안이 있다. 다시 조사하면 그 제안이 결정 없이 화면에서 사라지므로 먼저 결정하게 한다
+ *   (진행 중인 조사는 막지 않는다. 서버가 도중에 꺼지면 영원히 진행 중으로 남아 빠져나올 수 없게 된다)
  */
-export function startBlockedReason(alerted: boolean, nowSec: number, readyAt: number | null | undefined): string | undefined {
+export function startBlockedReason({ alerted, nowSec, readyAt, pendingProposal }: { alerted: boolean; nowSec: number; readyAt: number | null | undefined; pendingProposal: boolean }): string | undefined {
+  if (pendingProposal) return '승인 대기 중인 제안을 먼저 승인하거나 거절하세요';
   if (!alerted) return '경보가 울리면 조사할 수 있습니다';
   if (readyAt === undefined) return '데모 녹화 정보를 불러오는 중입니다';
   if (readyAt === null) return '이 시나리오는 데모 녹화를 찾지 못했습니다';
