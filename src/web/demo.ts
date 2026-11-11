@@ -1,6 +1,7 @@
 // 정적 데모: 서버 없이 미리 만든 파일(scripts/build-demo.ts)을 재생한다. VITE_DEMO=1 로 빌드할 때만 쓴다.
 // subscribe 와 같은 모양으로 만들어 화면 코드는 어느 쪽을 쓰는지만 고른다.
-// - /events: 시뮬레이터 이벤트를 배속에 맞춰 내보내고, 끝나면 reset 후 처음부터 (서버와 같은 id 'cycle:seq')
+// - /events: 시뮬레이터 이벤트를 배속에 맞춰 내보내고, 끝나면 reset 후 처음부터 (서버와 같은 id 'cycle:seq').
+//   서버와 달리 재생 시계를 브라우저가 쥐고 있어서, 일시정지하면 시계도 멈추고 재생하면 멈춘 자리부터 이어진다
 // - /investigations/:id/stream: 실제 모델로 돌린 조사 녹화를 단계마다 간격을 두고 내보낸다
 // - 승인·거절: 브라우저 안에서만 반영하고 저장하지 않는다. 서버와 같은 규칙(이름 형식, 거절 사유, 한 번만 결정)을 따른다
 
@@ -49,12 +50,25 @@ export function playbackGaps(events: readonly AuditEvent[]): number[] {
   });
 }
 
+/** 멈춘 동안은 흐르지 않는 시계. 돌려준 함수는 지금까지 흐른 초를 준다 */
+export function pausableClock(now: () => number, isPaused: () => boolean): () => number {
+  let ran = 0;
+  let last = now();
+  return () => {
+    const t = now();
+    if (!isPaused()) ran += (t - last) / 1000;
+    last = t;
+    return ran;
+  };
+}
+
 // 조사별 브라우저 안 결정 기록과 구독자. 새로고침하면 사라진다
 const local = new Map<string, AuditEvent[]>();
 const listeners = new Map<string, Set<(e: AuditEvent) => void>>();
 const proposalOwner = new Map<string, string>(); // 제안 id → 조사 id
 
-export async function demoSubscribe(url: string, opts: SubscribeOptions): Promise<void> {
+/** isPaused: 화면이 멈췄는지. 멈춘 동안은 /events 재생 시계가 흐르지 않는다 (조사 녹화 재생은 멈추지 않는다) */
+export async function demoSubscribe(url: string, opts: SubscribeOptions, isPaused: () => boolean): Promise<void> {
   const { signal, onMessage, onStatus } = opts;
   const u = new URL(url, location.origin);
   onStatus?.('connecting');
@@ -86,11 +100,11 @@ export async function demoSubscribe(url: string, opts: SubscribeOptions): Promis
   const speed = Number(u.searchParams.get('speed') ?? 1);
   const demo = await json<Demo>(`events/${scenario}.json`);
   onStatus?.('open');
-  const t0 = performance.now();
+  const clock = pausableClock(() => performance.now(), isPaused);
   let cycle = 0;
   let next = 0;
   while (!signal.aborted) {
-    const elapsed = ((performance.now() - t0) / 1000) * speed;
+    const elapsed = clock() * speed;
     const c = Math.floor(elapsed / demo.durationSec);
     if (c !== cycle) {
       for (; next < demo.events.length; next++) send(next);

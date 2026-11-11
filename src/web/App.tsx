@@ -57,7 +57,7 @@ const PAUSED: (typeof STATUS)[StreamStatus] = {
   label: '일시정지',
   tone: 'neutral',
   pulse: false,
-  help: '화면을 멈췄습니다. 그동안 온 이벤트는 재생을 누르면 한꺼번에 반영합니다',
+  help: DEMO ? '재생을 멈췄습니다. 다시 누르면 멈춘 자리부터 이어집니다' : '화면을 멈췄습니다. 그동안 온 이벤트는 재생을 누르면 한꺼번에 반영합니다',
 };
 
 /** 연결이 안 될 때 차트 자리와 이벤트 목록이 같이 보여 줄 문구. 연결 중이거나 정상이면 undefined */

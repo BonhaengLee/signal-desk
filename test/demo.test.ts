@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AuditEvent } from '../src/audit/store.ts';
-import { demoDecide, demoStart, playbackGaps, STEP_MAX_MS, STEP_MIN_MS } from '../src/web/demo.ts';
+import { demoDecide, demoStart, demoSubscribe, pausableClock, playbackGaps, STEP_MAX_MS, STEP_MIN_MS } from '../src/web/demo.ts';
 import { demoEvents } from '../scripts/build-demo.ts';
 import { readFileSync } from 'node:fs';
 
@@ -45,5 +45,48 @@ test('데모 녹화는 녹화 시점 전에 누르면 시작하지 않는다', a
     );
   } finally {
     globalThis.fetch = real;
+  }
+});
+
+test('멈추는 시계: 멈춘 동안 흐른 시간은 세지 않고, 다시 돌면 멈춘 값부터 이어 센다', () => {
+  let now = 0;
+  let paused = false;
+  const clock = pausableClock(() => now, () => paused);
+  const read = (ms: number) => ((now = ms), clock());
+  // 0→2초 재생, 2→60초 멈춤, 60→61초 재생
+  const a = read(2000);
+  paused = true;
+  const b = read(60_000);
+  paused = false;
+  const c = read(61_000);
+  assert.deepEqual([a, b, c], [2, 2, 3]);
+});
+
+test('데모 재생은 멈춘 동안 이벤트를 내보내지 않고, 풀면 그 자리부터 이어 보낸다', async () => {
+  const realFetch = globalThis.fetch;
+  const g = globalThis as { location?: unknown };
+  const realLocation = g.location;
+  // 1초마다 이벤트 하나, 10초짜리 시나리오
+  const events = Array.from({ length: 10 }, (_, i) => ({ simSec: i, event: { seq: i } }));
+  globalThis.fetch = (async () => ({ ok: true, json: async () => ({ durationSec: 10, events }) })) as unknown as typeof fetch;
+  g.location = { origin: 'http://demo.test' };
+  const ac = new AbortController();
+  const got: string[] = [];
+  let paused = true;
+  const done = demoSubscribe('/events?scenario=x&speed=20', { signal: ac.signal, onMessage: (m) => got.push(m.event === 'reset' ? 'reset' : m.id!) }, () => paused);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  try {
+    await sleep(350); // 멈추지 않았다면 20배속으로 7초어치가 지나간다
+    const whilePaused = [...got];
+    paused = false;
+    await sleep(250); // 약 5초어치
+    assert.deepEqual(whilePaused, ['0:0']);
+    assert.equal(got[1], '0:1'); // 멈춘 동안 건너뛴 구간 없이 1초 이벤트부터 이어진다
+    assert.equal(got.includes('reset'), false);
+  } finally {
+    ac.abort();
+    await done;
+    globalThis.fetch = realFetch;
+    g.location = realLocation;
   }
 });

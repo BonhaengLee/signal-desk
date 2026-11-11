@@ -1,10 +1,10 @@
 // SSE 이벤트를 받아 React 상태에 쌓는 훅.
 // 끊기면 subscribe 가 Last-Event-ID 로 다시 붙고 중복을 거른다. 재연결 대기 중은 'connecting' 으로 보여 준다.
 // paused 동안 받은 이벤트는 화면 상태에 넣지 않고 버퍼에 쌓는다. 재생 위치는 서버 시계가 정하므로(src/server/sse.ts positionAt)
-// 연결은 유지하고, 재생하면 버퍼를 한 번에 반영해 현재 위치로 따라잡는다. 데모(demoSubscribe)도 같은 경로를 쓴다.
+// 연결은 유지하고, 재생하면 버퍼를 한 번에 반영해 현재 위치로 따라잡는다. 데모(demoSubscribe)는 재생 시계 자체를 멈춘다.
 
 import { useEffect, useRef, useState } from 'react';
-import { subscribe } from '../client/subscribe.ts';
+import { subscribe, type SubscribeOptions } from '../client/subscribe.ts';
 import { DEMO, demoSubscribe } from './demo.ts';
 import { parseEvent, type SignalEvent } from '../events/schema.ts';
 
@@ -52,7 +52,7 @@ export function useSignalStream(url: string, paused = false) {
       setPending(heldRef.current.events.length);
     };
 
-    (DEMO ? demoSubscribe : subscribe)(url, {
+    const opts: SubscribeOptions = {
       signal: ac.signal,
       onStatus: (s, detail) => {
         if (s === 'open') {
@@ -84,7 +84,9 @@ export function useSignalStream(url: string, paused = false) {
         else if (pausedRef.current) hold({ event: result.event });
         else setEvents((prev) => [...prev, result.event]);
       },
-    }).catch(() => {
+    };
+    // 데모는 멈춘 동안 재생 시계도 세우므로 버퍼에 쌓일 것이 없다. 서버 모드는 서버 시계를 못 세워서 버퍼로 따라잡는다
+    (DEMO ? demoSubscribe(url, opts, () => pausedRef.current) : subscribe(url, opts)).catch(() => {
       if (!ac.signal.aborted) setStatus('error');
     });
 

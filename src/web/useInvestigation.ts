@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { AuditEvent } from '../audit/store.ts';
-import { subscribe } from '../client/subscribe.ts';
+import { subscribe, type SubscribeOptions } from '../client/subscribe.ts';
 import { DEMO, DemoError, demoDecide, demoStart, demoSubscribe } from './demo.ts';
 import { parseAuditEvent, summarizeInvestigation, type InvestigationView } from './investigation.ts';
 
@@ -18,14 +18,18 @@ export function useInvestigation(id: string | undefined): { view?: Investigation
     setStatus('connecting');
     if (!id) return;
     const ac = new AbortController();
-    (DEMO ? demoSubscribe : subscribe)(`/investigations/${id}/stream`, {
+    const url = `/investigations/${id}/stream`;
+    const opts: SubscribeOptions = {
       signal: ac.signal,
       onStatus: (s) => setStatus(s === 'open' ? 'open' : s === 'reconnecting' ? 'error' : 'connecting'),
       onMessage: (msg) => {
         const e = parseAuditEvent(msg.data);
         if (e) setEvents((prev) => [...prev, e]);
       },
-    });
+    };
+    // 조사 녹화는 재생을 멈춰도 계속 나온다 (조사를 누르면 화면이 자동으로 멈추기 때문)
+    if (DEMO) void demoSubscribe(url, opts, () => false);
+    else void subscribe(url, opts);
     return () => ac.abort();
   }, [id]);
 
