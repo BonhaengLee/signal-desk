@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AlertEvent, SignalEvent } from '../events/schema.ts';
+import type { SignalEvent } from '../events/schema.ts';
 import { useSignalStream, type StreamStatus } from './useSignalStream.ts';
 import { EventList, describe } from './EventList.tsx';
 import { Timeline } from './Timeline.tsx';
@@ -7,6 +7,7 @@ import { InvestigationPanel } from './Investigation.tsx';
 import { DEMO } from './demo.ts';
 import {
   SEVERITIES,
+  SEVERITY_LABEL,
   buildTimeline,
   formatElapsed,
   lastDeploy,
@@ -16,6 +17,7 @@ import {
   parseRule,
   severityOf,
   type Point,
+  type FiringAlert,
   type Severity,
 } from './derive.ts';
 import { Badge, Button, Card, ChipGroup, EmptyState, Segmented, Select, Switch, VisuallyHidden, type Tone } from './ui/controls.tsx';
@@ -45,6 +47,7 @@ type Speed = (typeof SPEEDS)[number]['id'];
 
 const STATUS: Record<StreamStatus, { label: string; tone: Tone; pulse: boolean; help: string }> = {
   connecting: { label: '연결 중', tone: 'neutral', pulse: true, help: 'SSE 서버에 연결하고 있습니다' },
+  reconnecting: { label: '재연결 중', tone: 'warn', pulse: true, help: '서버에 연결하지 못해 다시 시도하고 있습니다' },
   open: { label: DEMO ? '재생 중' : '실시간', tone: 'ok', pulse: true, help: DEMO ? '미리 만든 이벤트를 배속에 맞춰 재생하는 중입니다' : 'SSE 로 이벤트를 받는 중입니다' },
   closed: { label: '연결 종료', tone: 'neutral', pulse: false, help: '서버가 스트림을 닫았습니다' },
   error: { label: '연결 실패', tone: 'error', pulse: false, help: 'SSE 서버에 연결하지 못했습니다' },
@@ -57,9 +60,19 @@ const PAUSED: (typeof STATUS)[StreamStatus] = {
   help: '화면을 멈췄습니다. 그동안 온 이벤트는 재생을 누르면 한꺼번에 반영합니다',
 };
 
+/** 연결이 안 될 때 차트 자리와 이벤트 목록이 같이 보여 줄 문구. 연결 중이거나 정상이면 undefined */
+function connectionProblem(status: StreamStatus, attempt: number): { title: string; hint: string } | undefined {
+  const fix = DEMO ? '데모 파일을 불러오지 못했습니다. 새로고침해 보세요' : 'SSE 서버가 떠 있는지 확인하세요 (npm run dev:server)';
+  if (status === 'error') return { title: DEMO ? '데모를 불러오지 못했습니다' : '서버에 연결하지 못했습니다', hint: fix };
+  if (status === 'reconnecting') return { title: '서버에 연결하지 못했습니다', hint: `${attempt}번째 다시 시도하는 중입니다. ${fix}` };
+  return undefined;
+}
+
+/** 연결 실패 중 경보·서비스 패널 문구. 이유와 조치는 차트 자리와 이벤트 목록이 보여 준다 */
+const SHOWN_AFTER_CONNECT = '서버에 연결되면 표시합니다';
+
 const ERROR_RATE_HIGHLIGHT = 5; // %
 const METRIC_LABEL: Record<string, string> = { latency_p99: 'p99', error_rate: '오류율' };
-const SEVERITY_LABEL: Record<Severity, string> = { error: '에러', warn: '경고', info: '정보', deploy: '배포' };
 const SERIES_COLORS = ['--series-1', '--series-2', '--series-3', '--series-4', '--series-5', '--series-6'];
 
 const VIEW_OPTIONS: ViewOptions = {
@@ -90,7 +103,7 @@ export function App() {
   // 멈춤은 그 스트림에 묶는다. 시나리오·배속을 바꾸면 새 스트림이라 저절로 풀린다. 주소에는 남기지 않는다 (링크로 연 화면이 멈춰 있으면 안 된다)
   const [pausedFor, setPausedFor] = useState<string | null>(null);
   const paused = pausedFor === streamUrl;
-  const { events, status, rejected, pending } = useSignalStream(streamUrl, paused);
+  const { events, status, attempt, rejected, pending } = useSignalStream(streamUrl, paused);
   /** 조사를 누른 순간 화면을 멈춰 결론과 차트가 같은 시점을 보게 한다. 시작에 실패하면 돌려준 함수로 되돌린다. 이미 멈춰 있었으면 그대로 둔다 */
   const holdPlayback = () => {
     if (paused) return () => {};
@@ -144,6 +157,7 @@ export function App() {
     setHiddenServices(new Set());
   };
   const st = paused && status === 'open' ? PAUSED : STATUS[status];
+  const problem = connectionProblem(status, attempt);
   const waiting = events.length === 0;
   // error 를 위로, 같은 등급이면 최근에 울린 것을 위로
   const alerts = [...firing.values()].reverse().sort((a, b) => (a.payload.level === b.payload.level ? 0 : a.payload.level === 'error' ? -1 : 1));
@@ -175,6 +189,7 @@ export function App() {
           <span role="status" title={st.help}>
             <Badge tone={st.tone} dot pulse={st.pulse}>
               {st.label}
+              {status === 'reconnecting' && ` ${attempt}회째`}
               <VisuallyHidden>. {st.help}</VisuallyHidden>
             </Badge>
           </span>
@@ -191,7 +206,7 @@ export function App() {
           className="area-timeline"
           labelledBy="h-timeline"
           title="p99 지연 타임라인"
-          meta={!waiting && `배포 ${timeline.deploys.length} · 경보 ${timeline.spans.length}`}
+          meta={!waiting && `배포 ${timeline.deploys.length} · 경보 ${timeline.alerts}`}
           actions={
             timeline.services.length > 0 && (
               <ChipGroup
@@ -204,7 +219,7 @@ export function App() {
           }
         >
           {waiting ? (
-            <ChartPlaceholder status={status} />
+            <ChartPlaceholder problem={problem} />
           ) : (
             <Timeline data={timeline} durationSec={scenario.durationSec} tickSec={scenario.tickSec} colors={colors} hidden={hiddenLines} />
           )}
@@ -224,7 +239,7 @@ export function App() {
           >
             {alerts.length === 0 ? (
               waiting ? (
-                <EmptyState title="경보를 기다리는 중" />
+                <EmptyState title={problem ? SHOWN_AFTER_CONNECT : '경보를 기다리는 중'} />
               ) : (
                 <EmptyState icon={<CheckIcon />} title="발생 중인 경보 없음">
                   모든 서비스가 기준 안에 있습니다
@@ -241,7 +256,7 @@ export function App() {
 
           <Card labelledBy="h-services" title="서비스 상태" meta={timeline.services.length > 0 && `${timeline.services.length}개`} bodyClassName="services-body">
             {timeline.services.length === 0 ? (
-              <EmptyState title="서비스 지표를 기다리는 중" />
+              <EmptyState title={problem ? SHOWN_AFTER_CONNECT : '서비스 지표를 기다리는 중'} />
             ) : (
               <table className="table">
                 <thead>
@@ -341,9 +356,13 @@ export function App() {
                 <EventList events={visible} virtual origin={origin} />
               </>
             ) : waiting ? (
-              <EmptyState icon={<Spinner />} title={status === 'error' ? '서버에 연결하지 못했습니다' : '이벤트를 기다리는 중'}>
-                {status === 'error' ? 'SSE 서버가 떠 있는지 확인하세요 (npm run dev:server)' : '첫 이벤트가 오면 최신순으로 쌓입니다'}
-              </EmptyState>
+              problem ? (
+                <EmptyState title={problem.title}>{problem.hint}</EmptyState>
+              ) : (
+                <EmptyState icon={<Spinner />} title="이벤트를 기다리는 중">
+                  첫 이벤트가 오면 최신순으로 쌓입니다
+                </EmptyState>
+              )
             ) : filtered ? (
               <EmptyState title="조건에 맞는 이벤트가 없습니다">
                 <button type="button" className="link-button" onClick={resetFilters}>
@@ -360,7 +379,7 @@ export function App() {
             )}
           </div>
         </Card>
-        <InvestigationPanel scenario={scenarioName} nowSec={timeline.now} alerted={timeline.spans.length > 0} onStart={holdPlayback} />
+        <InvestigationPanel scenario={scenarioName} nowSec={timeline.now} alerted={timeline.alerts > 0} onStart={holdPlayback} />
       </main>
     </div>
   );
@@ -373,7 +392,7 @@ function AlertItem({
   origin,
   now,
 }: {
-  alert: AlertEvent;
+  alert: FiringAlert;
   events: readonly SignalEvent[];
   metrics: ReturnType<typeof latestMetrics>;
   origin: number;
@@ -381,7 +400,7 @@ function AlertItem({
 }) {
   const rule = parseRule(alert.payload.rule);
   const current = rule ? metrics.get(metricKey(alert.service, rule.metric)) : undefined;
-  const since = (alert.at.getTime() - origin) / 1000;
+  const since = (alert.since.getTime() - origin) / 1000; // 등급이 올라도 처음 울린 시각부터 센다
   const deploy = lastDeploy(events, alert.service);
   const deployAt = deploy ? (deploy.at.getTime() - origin) / 1000 : undefined;
   const ratio = rule && current && rule.threshold > 0 ? current.value / rule.threshold : undefined;
@@ -389,7 +408,7 @@ function AlertItem({
   return (
     <li className="alert" data-level={alert.payload.level} title={alert.payload.rule}>
       <div className="alert-top">
-        <Badge tone={alert.payload.level}>{alert.payload.level === 'error' ? 'ERROR' : 'WARN'}</Badge>
+        <Badge tone={alert.payload.level}>{SEVERITY_LABEL[alert.payload.level]}</Badge>
         <span className="alert-svc">{alert.service}</span>
         <span className="alert-since">
           {formatElapsed(since)}부터 · {formatDuration(now - since)}째
@@ -464,15 +483,18 @@ function Sparkline({ points, color, total }: { points: readonly Point[]; color?:
   );
 }
 
-function ChartPlaceholder({ status }: { status: StreamStatus }) {
+/** 실패 중에는 불러오는 중이나 데이터가 있는 것처럼 보이지 않게 스피너와 뼈대 선을 그리지 않는다 */
+function ChartPlaceholder({ problem }: { problem?: { title: string; hint: string } }) {
   return (
     <div className="chart-placeholder">
-      <svg className="chart-skeleton" viewBox="0 0 600 120" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M0,95 C60,92 90,88 130,90 S220,84 260,86 S340,40 380,52 S470,70 520,64 S580,60 600,62" />
-      </svg>
+      {!problem && (
+        <svg className="chart-skeleton" viewBox="0 0 600 120" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0,95 C60,92 90,88 130,90 S220,84 260,86 S340,40 380,52 S470,70 520,64 S580,60 600,62" />
+        </svg>
+      )}
       <div className="chart-placeholder-text">
-        {status === 'error' ? (
-          <EmptyState title="서버에 연결하지 못했습니다">SSE 서버가 떠 있는지 확인하세요</EmptyState>
+        {problem ? (
+          <EmptyState title={problem.title}>{problem.hint}</EmptyState>
         ) : (
           <EmptyState icon={<Spinner />} title="스트림에 연결하는 중">
             지표가 들어오면 서비스별 p99 선과 배포·경보 구간이 그려집니다

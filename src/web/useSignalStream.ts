@@ -8,7 +8,9 @@ import { subscribe } from '../client/subscribe.ts';
 import { DEMO, demoSubscribe } from './demo.ts';
 import { parseEvent, type SignalEvent } from '../events/schema.ts';
 
-export type StreamStatus = 'connecting' | 'open' | 'closed' | 'error';
+// reconnecting: 연결이 끊겨 다시 시도하는 중. subscribe 는 끊으라는 요청이 올 때까지 계속 다시 붙으므로 서버 모드의 실패는 이 상태로 보인다.
+// error: 더 시도하지 않고 끝난 실패(데모 파일을 못 읽은 경우 등)
+export type StreamStatus = 'connecting' | 'open' | 'reconnecting' | 'closed' | 'error';
 
 /** 멈춘 동안 받은 것. reset 이 왔으면 화면의 이벤트를 비우고 events 로 바꿔야 한다 */
 export type Held = { readonly reset: boolean; readonly events: readonly SignalEvent[] };
@@ -30,6 +32,7 @@ export function useSignalStream(url: string, paused = false) {
   const [events, setEvents] = useState<SignalEvent[]>([]);
   const [status, setStatus] = useState<StreamStatus>('connecting');
   const [rejected, setRejected] = useState(0);
+  const [attempt, setAttempt] = useState(0); // 재연결 시도 횟수. 연결되면 0
   const [pending, setPending] = useState(0); // 버퍼에 쌓인 이벤트 수 (reset 뒤 것만)
   // 메시지 콜백은 연결할 때 한 번 만들어지므로 멈춤 여부와 버퍼는 ref 로 읽는다. 멈춤을 바꿔도 다시 연결하지 않는다
   const pausedRef = useRef(paused);
@@ -40,6 +43,7 @@ export function useSignalStream(url: string, paused = false) {
     setEvents([]);
     setRejected(0);
     setStatus('connecting');
+    setAttempt(0);
     heldRef.current = EMPTY_HELD;
     setPending(0);
 
@@ -50,9 +54,14 @@ export function useSignalStream(url: string, paused = false) {
 
     (DEMO ? demoSubscribe : subscribe)(url, {
       signal: ac.signal,
-      onStatus: (s) => {
-        if (s === 'open') setStatus('open');
-        else if (s === 'connecting' || s === 'reconnecting') setStatus('connecting');
+      onStatus: (s, detail) => {
+        if (s === 'open') {
+          setStatus('open');
+          setAttempt(0);
+        } else if (s === 'reconnecting') {
+          setStatus('reconnecting');
+          setAttempt(detail?.attempt ?? 0);
+        } else if (s === 'connecting') setStatus('connecting');
         else if (!ac.signal.aborted) setStatus('closed');
       },
       onMessage: (msg) => {
@@ -93,5 +102,5 @@ export function useSignalStream(url: string, paused = false) {
     if (held !== EMPTY_HELD) setEvents((prev) => releaseHeld(prev, held));
   }, [paused]);
 
-  return { events, status, rejected, pending };
+  return { events, status, attempt, rejected, pending };
 }

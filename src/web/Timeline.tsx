@@ -4,7 +4,7 @@
 // 키보드: 차트에 포커스한 뒤 ←/→ 로 시점을 옮기고 Home/End 로 처음·지금으로 간다. Esc 로 커서를 지운다.
 
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { formatElapsed, niceMax, parseRule, type AlertSpan, type Timeline as TimelineData } from './derive.ts';
+import { activeSpansAt, formatElapsed, niceMax, parseRule, SEVERITY_LABEL, type AlertSpan, type Timeline as TimelineData } from './derive.ts';
 import s from './Timeline.module.css';
 
 const HEIGHT = 0;
@@ -261,9 +261,9 @@ export function Timeline({ data, durationSec, tickSec, colors, hidden }: Props) 
               </span>
             </div>
           ))}
-          {activeAt(data.spans, cursorT).map((sp) => (
+          {activeSpansAt(data.spans, cursorT).map((sp) => (
             <div key={sp.service} className={s.readoutAlert} data-level={sp.level}>
-              {sp.service} 경보 {sp.level}
+              {sp.service} {SEVERITY_LABEL[sp.level]} 경보
             </div>
           ))}
         </div>
@@ -316,13 +316,15 @@ function readAt(data: TimelineData, services: readonly string[], t: number, tick
   return out.sort((a, b) => b.v - a.v);
 }
 
-const activeAt = (spans: readonly AlertSpan[], t: number) => spans.filter((sp) => sp.from <= t && t <= sp.to);
 
 function describeTimeline(data: TimelineData, thresholds: { service: string; value: number }[]) {
   if (data.series.size === 0) return '아직 받은 지표가 없습니다.';
   const parts = [`${formatElapsed(data.now)}까지`];
   for (const d of data.deploys) parts.push(`${formatElapsed(d.t)} ${d.service} ${d.version} 배포`);
-  for (const sp of data.spans) parts.push(`${formatElapsed(sp.from)} ${sp.service} ${sp.level} 경보${sp.open ? ' 진행 중' : ` ${formatElapsed(sp.to)} 해소`}`);
+  for (const sp of data.spans) {
+    const end = sp.open ? ' 진행 중' : sp.escalated ? ` ${formatElapsed(sp.to)} 등급 상승` : ` ${formatElapsed(sp.to)} 해소`;
+    parts.push(`${formatElapsed(sp.from)} ${sp.service} ${SEVERITY_LABEL[sp.level]} 경보${end}`);
+  }
   for (const [sv, pts] of data.series) {
     const max = Math.max(...pts.map((p) => p.v));
     const th = thresholds.find((x) => x.service === sv);

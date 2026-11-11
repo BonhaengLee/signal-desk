@@ -13,14 +13,16 @@ export function formatElapsed(sec: number): string {
 export const elapsedSec = (at: Date, originMs: number) => (at.getTime() - originMs) / 1000;
 
 export type Point = { t: number; v: number };
-export type AlertSpan = { service: string; level: AlertLevel; rule: string; from: number; to: number; open: boolean };
+/** escalated: 해소가 아니라 등급이 올라 닫힌 구간. 바로 뒤에 같은 서비스의 더 높은 등급 구간이 이어진다 */
+export type AlertSpan = { service: string; level: AlertLevel; rule: string; from: number; to: number; open: boolean; escalated: boolean };
 export type DeployMark = { t: number; service: string; version: string; actor: string };
 
 export interface Timeline {
   services: string[]; // 처음 등장한 순서. 색 배정이 바뀌지 않도록 순서를 고정한다
   series: Map<string, Point[]>; // 서비스별 latency_p99
   deploys: DeployMark[];
-  spans: AlertSpan[]; // 경보 발생~해소. 등급이 바뀌면 구간을 나눈다
+  spans: AlertSpan[]; // 경보 발생~해소. 등급이 바뀌면 구간을 나눈다 (색을 다르게 칠하려고)
+  alerts: number; // 새로 울린 경보 수. 울리는 중 등급이 오른 것은 세지 않는다 (spans.length 와 다르다)
   now: number; // 마지막으로 받은 이벤트의 경과 시간
 }
 
@@ -33,6 +35,7 @@ export function buildTimeline(events: readonly SignalEvent[], originMs: number):
   const deploys: DeployMark[] = [];
   const spans: AlertSpan[] = [];
   const open = new Map<string, AlertSpan>(); // 서비스별로 아직 끝나지 않은 구간
+  let alerts = 0;
   let now = 0;
 
   for (const e of events) {
@@ -63,12 +66,13 @@ export function buildTimeline(events: readonly SignalEvent[], originMs: number):
           }
           break;
         }
-        // 같은 서비스에서 다시 firing 이 오면(warn → error 등급 상승) 앞 구간을 닫고 새 구간을 연다
+        // 같은 서비스에서 다시 firing 이 오면(warn → error 등급 상승) 앞 구간을 닫고 새 구간을 연다. 새 경보로 세지는 않는다
         if (cur) {
           cur.to = t;
           cur.open = false;
-        }
-        const span: AlertSpan = { service: e.service, level: e.payload.level, rule: e.payload.rule, from: t, to: t, open: true };
+          cur.escalated = true;
+        } else alerts++;
+        const span: AlertSpan = { service: e.service, level: e.payload.level, rule: e.payload.rule, from: t, to: t, open: true, escalated: false };
         spans.push(span);
         open.set(e.service, span);
         break;
@@ -78,21 +82,28 @@ export function buildTimeline(events: readonly SignalEvent[], originMs: number):
     }
   }
   for (const s of open.values()) s.to = now; // 열린 구간은 지금까지 칠한다
-  return { services, series, deploys, spans, now };
+  return { services, series, deploys, spans, alerts, now };
 }
 
-/** 서비스별로 가장 최근 firing 경보. resolved 가 오면 지운다 */
-export function latestFiring(events: readonly SignalEvent[]): Map<string, AlertEvent> {
-  const firing = new Map<string, AlertEvent>();
+/** 울리는 중인 경보. 등급은 가장 최근 firing 을 따르고, since 는 처음 울린 시각이다 (등급이 올라도 유지) */
+export type FiringAlert = AlertEvent & { since: Date };
+
+/** 서비스별로 울리는 중인 경보. resolved 가 오면 지운다. Map 순서는 마지막으로 울린(등급이 오른) 순서 */
+export function latestFiring(events: readonly SignalEvent[]): Map<string, FiringAlert> {
+  const firing = new Map<string, FiringAlert>();
   for (const e of events) {
     if (e.type !== 'alert') continue;
     if (e.payload.state === 'firing') {
+      const since = firing.get(e.service)?.since ?? e.at;
       firing.delete(e.service); // 다시 넣어서 Map 순서도 최근 순으로
-      firing.set(e.service, e);
+      firing.set(e.service, { ...e, since });
     } else firing.delete(e.service);
   }
   return firing;
 }
+
+/** 닫힌 구간은 끝 시각을 포함하지 않는다. 등급이 오른 순간 앞 구간의 끝과 뒤 구간의 시작이 같아 둘 다 잡히는 것을 막는다 */
+export const activeSpansAt = (spans: readonly AlertSpan[], t: number) => spans.filter((sp) => sp.from <= t && (sp.open ? t <= sp.to : t < sp.to));
 
 /** 서비스·지표별 최근 값. key 는 `service\u0000metric` */
 export function latestMetrics(events: readonly SignalEvent[]): Map<string, { value: number; unit: string }> {
@@ -123,6 +134,8 @@ export function lastDeploy(events: readonly SignalEvent[], service: string): Dep
 
 export type Severity = 'error' | 'warn' | 'info' | 'deploy';
 export const SEVERITIES: readonly Severity[] = ['error', 'warn', 'info', 'deploy'];
+/** 등급 이름. 필터 칩·경보 카드·타임라인 툴팁·스크린 리더 요약이 모두 이 이름을 쓴다 */
+export const SEVERITY_LABEL: Record<Severity, string> = { error: '에러', warn: '경고', info: '정보', deploy: '배포' };
 
 export function severityOf(e: SignalEvent): Severity {
   if (e.type === 'log' || e.type === 'alert') return e.payload.level;
