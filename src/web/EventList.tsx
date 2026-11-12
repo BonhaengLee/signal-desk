@@ -30,8 +30,10 @@ export function describe(e: SignalEvent): string {
 
 export const severity = severityOf;
 
-// 같은 이벤트·같은 위치면 다시 그리지 않는다. 비교를 공정하게 하려고 가상화 없는 쪽에도 똑같이 적용된다
-const Row = memo(function Row({ e, style, origin, index }: { e: SignalEvent; style?: React.CSSProperties; origin?: number; index?: number }) {
+// 같은 이벤트·같은 위치면 다시 그리지 않는다. 비교를 공정하게 하려고 가상화 없는 쪽에도 똑같이 적용된다.
+// 위치는 숫자(top)로 받는다. style 객체를 넘기면 렌더마다 새 객체라 memo 비교가 늘 실패한다
+const Row = memo(function Row({ e, top, origin, index }: { e: SignalEvent; top?: number; origin?: number; index?: number }) {
+  const style = top === undefined ? PLAIN_STYLE : ({ position: 'absolute', top: 0, left: 0, right: 0, height: ROW_HEIGHT, transform: `translateY(${top}px)` } as const);
   const text = describe(e);
   const sev = severity(e);
   return (
@@ -60,7 +62,7 @@ export function EventList({ events, virtual, origin, label = '이벤트 목록' 
       <div ref={scrollRef} className="events" data-testid="event-list" role="table" aria-label={label} aria-rowcount={events.length}>
         {/* 모든 줄이 DOM 에 있으므로 aria-rowindex 가 필요 없다. 넘기면 맨 위 삽입 때 모든 줄의 memo 가 깨진다 */}
         {events.map((e) => (
-          <Row key={e.id} e={e} style={PLAIN_STYLE} origin={origin} />
+          <Row key={e.id} e={e} origin={origin} />
         ))}
       </div>
     );
@@ -74,13 +76,7 @@ export function EventList({ events, virtual, origin, label = '이벤트 목록' 
         {virtualizer.getVirtualItems().map((item) => {
           const e = events[item.index]!;
           return (
-            <Row
-              key={e.id}
-              e={e}
-              origin={origin}
-              index={item.index}
-              style={{ position: 'absolute', top: 0, left: 0, right: 0, height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
-            />
+            <Row key={e.id} e={e} origin={origin} index={item.index} top={item.start} />
           );
         })}
       </div>
