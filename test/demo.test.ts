@@ -132,3 +132,31 @@ test('데모 녹화 시점은 녹화 목록(index.json)에서 읽고, 녹화가 
     globalThis.fetch = realFetch;
   }
 });
+
+test('끝까지 본 조사 녹화는 다시 열면 간격 없이 바로 보낸다 (시나리오를 바꿨다 돌아온 경우)', async () => {
+  const realFetch = globalThis.fetch;
+  const g = globalThis as { location?: unknown };
+  const realLocation = g.location;
+  const id = '11111111-1111-4111-8111-111111111111';
+  const events = [at(0), at(1), at(2)].map((e, i) => ({ ...e, seq: i + 1 }));
+  globalThis.fetch = (async () => ({ ok: true, headers: JSON_HEADERS, json: async () => ({ id, scenario: 'x', events }) })) as unknown as typeof fetch;
+  g.location = { origin: 'http://demo.test' };
+  // 3건을 다 받으면 끊고 걸린 시간을 잰다
+  const play = async () => {
+    const ac = new AbortController();
+    let got = 0;
+    const t0 = performance.now();
+    await demoSubscribe(`/investigations/${id}/stream`, { signal: ac.signal, onMessage: () => ++got === events.length && ac.abort() }, () => false);
+    return [got, performance.now() - t0] as const;
+  };
+  try {
+    const [firstGot, firstMs] = await play();
+    const [againGot, againMs] = await play();
+    assert.deepEqual([firstGot, againGot], [3, 3]);
+    assert.ok(firstMs >= 2 * STEP_MIN_MS, `처음은 간격을 둔다: ${firstMs}ms`);
+    assert.ok(againMs < STEP_MIN_MS, `다시 열면 바로: ${againMs}ms`);
+  } finally {
+    globalThis.fetch = realFetch;
+    g.location = realLocation;
+  }
+});

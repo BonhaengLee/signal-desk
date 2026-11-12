@@ -70,9 +70,14 @@ export function InvestigationPanel({
   alerted: boolean;
   onStart: () => () => void;
 }) {
-  const [id, setId] = useState(readInv);
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string>();
+  // 조사·오류·시작 중 여부를 시나리오마다 따로 둔다. 시나리오를 바꾸면 그 시나리오의 조사가 보이고, 돌아오면 이전 조사가 다시 보인다.
+  // 비우지 않는 이유: 승인 대기 제안이 결정 없이 화면에서 사라지면 다시 조사를 막은 것과 같은 빈 곳이 생긴다
+  const [ids, setIds] = useState<Readonly<Record<string, string | undefined>>>(() => ({ [scenario]: readInv() }));
+  const [errors, setErrors] = useState<Readonly<Record<string, string | undefined>>>({});
+  const [startingFor, setStartingFor] = useState<string | null>(null);
+  const id = ids[scenario];
+  const error = errors[scenario];
+  const starting = startingFor === scenario;
   const { view, status } = useInvestigation(id);
   const readyAt = useReadyAt(scenario);
   const blocked = startBlockedReason({ alerted, nowSec, readyAt, pendingProposal: view?.proposal?.status === 'pending' });
@@ -81,21 +86,23 @@ export function InvestigationPanel({
   useEffect(() => writeInv(id), [id]);
 
   const start = async () => {
+    const sc = scenario; // 응답을 기다리는 사이 시나리오를 바꿔도 결과는 누른 시나리오에 붙인다
     const atSec = Math.floor(nowSec);
     const undo = onStart();
-    setStarting(true);
-    setError(undefined);
+    setStartingFor(sc);
+    setErrors((prev) => ({ ...prev, [sc]: undefined }));
     try {
-      setId(await startInvestigation(scenario, SEED, atSec));
+      const next = await startInvestigation(sc, SEED, atSec);
+      setIds((prev) => ({ ...prev, [sc]: next }));
     } catch (e) {
       undo();
-      setError(
+      const message =
         e instanceof ApiError && e.status === 404 && !DEMO
           ? '조사 API 가 꺼져 있습니다. .env.local 에 LLM 키를 넣고 서버를 다시 켜세요'
-          : `조사를 시작하지 못했습니다: ${(e as Error).message}`,
-      );
+          : `조사를 시작하지 못했습니다: ${(e as Error).message}`;
+      setErrors((prev) => ({ ...prev, [sc]: message }));
     } finally {
-      setStarting(false);
+      setStartingFor((prev) => (prev === sc ? null : prev));
     }
   };
 

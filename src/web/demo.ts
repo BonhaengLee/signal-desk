@@ -69,6 +69,7 @@ export function pausableClock(now: () => number, isPaused: () => boolean): () =>
 const local = new Map<string, AuditEvent[]>();
 const listeners = new Map<string, Set<(e: AuditEvent) => void>>();
 const proposalOwner = new Map<string, string>(); // 제안 id → 조사 id
+const played = new Set<string>(); // 이 브라우저에서 끝까지 재생한 녹화. 시나리오를 바꿨다 돌아오면 간격 없이 바로 보낸다
 
 /** isPaused: 화면이 멈췄는지. 멈춘 동안은 /events 재생 시계가 흐르지 않는다 (조사 녹화 재생은 멈추지 않는다) */
 export async function demoSubscribe(url: string, opts: SubscribeOptions, isPaused: () => boolean): Promise<void> {
@@ -81,14 +82,16 @@ export async function demoSubscribe(url: string, opts: SubscribeOptions, isPause
     const rec = await json<Recording>(`investigations/${inv[1]}.json`);
     onStatus?.('open');
     const emit = (e: AuditEvent) => onMessage({ event: e.kind, id: String(e.seq), data: JSON.stringify(e) } satisfies SseMessage);
-    const gaps = playbackGaps(rec.events);
+    const gaps = played.has(rec.id) ? rec.events.map(() => 0) : playbackGaps(rec.events);
     for (let i = 0; i < rec.events.length && !signal.aborted; i++) {
       await wait(gaps[i]!, signal);
       if (signal.aborted) break;
       const e = rec.events[i]!;
       if (e.kind === 'proposal') proposalOwner.set(String((e.payload as { proposalId: string }).proposalId), rec.id);
       emit(e);
+      if (i === rec.events.length - 1) played.add(rec.id); // 마지막 것까지 보냈으면 다 본 것이다 (받자마자 끊겨도)
     }
+    if (signal.aborted) return;
     // 녹화가 끝난 뒤의 결정은 이 브라우저에서 한 것만
     for (const e of local.get(rec.id) ?? []) emit(e);
     const set = listeners.get(rec.id) ?? listeners.set(rec.id, new Set()).get(rec.id)!;
