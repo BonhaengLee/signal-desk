@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AuditEvent } from '../src/audit/store.ts';
-import { demoDecide, demoReadyAt, demoStart, demoSubscribe, pausableClock, playbackGaps, STEP_MAX_MS, STEP_MIN_MS } from '../src/web/demo.ts';
+import { demoDecide, demoReadyAt, demoSeek, demoStart, demoSubscribe, pausableClock, playbackGaps, STEP_MAX_MS, STEP_MIN_MS } from '../src/web/demo.ts';
 import { demoEvents } from '../scripts/build-demo.ts';
 import { readFileSync } from 'node:fs';
 
@@ -53,7 +53,7 @@ test('멈추는 시계: 멈춘 동안 흐른 시간은 세지 않고, 다시 돌
   let now = 0;
   let paused = false;
   const clock = pausableClock(() => now, () => paused);
-  const read = (ms: number) => ((now = ms), clock());
+  const read = (ms: number) => ((now = ms), clock.read());
   // 0→2초 재생, 2→60초 멈춤, 60→61초 재생
   const a = read(2000);
   paused = true;
@@ -156,6 +156,41 @@ test('끝까지 본 조사 녹화는 다시 열면 간격 없이 바로 보낸�
     assert.ok(firstMs >= 2 * STEP_MIN_MS, `처음은 간격을 둔다: ${firstMs}ms`);
     assert.ok(againMs < STEP_MIN_MS, `다시 열면 바로: ${againMs}ms`);
   } finally {
+    globalThis.fetch = realFetch;
+    g.location = realLocation;
+  }
+});
+
+test('재생 위치 옮기기: 멈춰 있어도 그 시점까지의 이벤트를 한 건으로 보내고, 멈춘 동안은 더 보내지 않는다', async () => {
+  const realFetch = globalThis.fetch;
+  const g = globalThis as { location?: unknown };
+  const realLocation = g.location;
+  const events = Array.from({ length: 10 }, (_, i) => ({ simSec: i * 10, event: { seq: i } }));
+  globalThis.fetch = (async () => ({ ok: true, headers: JSON_HEADERS, json: async () => ({ durationSec: 100, events }) })) as unknown as typeof fetch;
+  g.location = { origin: 'http://demo.test' };
+  const ac = new AbortController();
+  const got: { event: string; data?: string; id?: string }[] = [];
+  let paused = true;
+  const done = demoSubscribe('/events?scenario=x&speed=20', { signal: ac.signal, onMessage: (m) => got.push(m) }, () => paused);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  try {
+    await sleep(150);
+    demoSeek(45);
+    await sleep(350);
+    const snap = got.filter((m) => m.event === 'snapshot');
+    assert.deepEqual(
+      [snap.length, JSON.parse(snap[0]!.data!).map((e: { seq: number }) => e.seq), got.at(-1)!.event],
+      [1, [0, 1, 2, 3, 4], 'snapshot'], // 0~40초 이벤트. 멈춰 있으니 그 뒤로 더 오지 않는다
+    );
+    paused = false;
+    await sleep(400); // 20배속으로 약 8초어치: 45초에서 이어지면 50초 이벤트만 오고 60초 이벤트는 아직이다
+    assert.deepEqual(
+      got.slice(got.findIndex((m) => m.event === 'snapshot') + 1).map((m) => m.id), // 옮긴 뒤에 온 것만 (0초 이벤트는 옮기기 전에 나갔다)
+      ['0:5'],
+    );
+  } finally {
+    ac.abort();
+    await done;
     globalThis.fetch = realFetch;
     g.location = realLocation;
   }

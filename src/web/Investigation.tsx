@@ -7,7 +7,7 @@ import type { Verdict } from '../agent/tools.ts';
 import { formatCall, formatResult, previewResult, startBlockedReason, type InvestigationView } from './investigation.ts';
 import { formatElapsed } from './derive.ts';
 import { ApiError, decideProposal, startInvestigation, useInvestigation, useReadyAt, type InvestigationStreamStatus } from './useInvestigation.ts';
-import { DEMO } from './demo.ts';
+import { DEMO, demoSeek } from './demo.ts';
 import { Badge, Button, Card, EmptyState, VisuallyHidden, type Tone } from './ui/controls.tsx';
 import { OPERATOR_RE } from '../audit/rules.ts';
 import s from './Investigation.module.css';
@@ -80,15 +80,18 @@ export function InvestigationPanel({
   const starting = startingFor === scenario;
   const { view, status } = useInvestigation(id);
   const readyAt = useReadyAt(scenario);
-  const blocked = startBlockedReason({ alerted, nowSec, readyAt, pendingProposal: view?.proposal?.status === 'pending' });
+  const blocked = startBlockedReason(DEMO ? { demo: true, readyAt } : { demo: false, alerted, pendingProposal: view?.proposal?.status === 'pending' });
+  const recordedAt = typeof readyAt === 'number' ? formatElapsed(readyAt) : '';
   const blockedId = useId();
 
   useEffect(() => writeInv(id), [id]);
 
   const start = async () => {
     const sc = scenario; // 응답을 기다리는 사이 시나리오를 바꿔도 결과는 누른 시나리오에 붙인다
-    const atSec = Math.floor(nowSec);
+    // 데모는 녹화 시점으로 재생을 옮긴다. 차트와 결론이 같은 시점을 보게 하려고 멈춘 뒤 옮긴다
+    const atSec = DEMO && typeof readyAt === 'number' ? readyAt : Math.floor(nowSec);
     const undo = onStart();
+    if (DEMO) demoSeek(atSec);
     setStartingFor(sc);
     setErrors((prev) => ({ ...prev, [sc]: undefined }));
     try {
@@ -124,9 +127,14 @@ export function InvestigationPanel({
           onClick={start}
           disabled={starting || blocked !== undefined}
           aria-describedby={blocked ? blockedId : undefined}
-          title={blocked ?? `${formatElapsed(Math.floor(nowSec))} 까지의 기록으로 조사합니다. 화면 재생도 이 시점에서 멈춥니다`}
+          title={
+            blocked ??
+            (DEMO
+              ? `재생을 ${recordedAt} 으로 옮겨 멈추고, 실제 모델이 그 시점까지의 기록으로 돌린 조사 녹화를 엽니다`
+              : `${formatElapsed(Math.floor(nowSec))} 까지의 기록으로 조사합니다. 화면 재생도 이 시점에서 멈춥니다`)
+          }
         >
-          {starting ? '시작하는 중…' : id ? '다시 조사' : '지금 시점까지 조사'}
+          {starting ? '시작하는 중…' : DEMO ? `${recordedAt} 조사 녹화 보기` : id ? '다시 조사' : '지금 시점까지 조사'}
         </Button>
       }
       className={`${s.card} area-inv`}
@@ -144,10 +152,16 @@ export function InvestigationPanel({
         </p>
       )}
       {!id ? (
-        <EmptyState title={alerted ? '아직 조사하지 않았습니다' : '경보를 기다리는 중'}>
-          에이전트는 누른 시점까지의 경보·지표·로그·배포만 보고 원인과 조치를 제안합니다. 조치는 사람이 승인해야 실행됩니다
-          {DEMO && typeof readyAt === 'number' && `. 데모는 실제 모델로 ${formatElapsed(readyAt)} 시점에 돌린 조사를 재생하고, 승인·거절은 이 브라우저에만 반영됩니다`}
-        </EmptyState>
+        DEMO ? (
+          <EmptyState title="조사 녹화를 아직 열지 않았습니다">
+            데모는 서버와 LLM 키 없이 돌아서 에이전트를 직접 부르지 않습니다. 버튼을 누르면 재생을 {recordedAt} 으로 옮기고, 실제 모델이 그 시점까지의
+            경보·지표·로그·배포만 보고 돌린 조사를 재생합니다. 승인·거절은 이 브라우저에만 반영됩니다
+          </EmptyState>
+        ) : (
+          <EmptyState title={alerted ? '아직 조사하지 않았습니다' : '경보를 기다리는 중'}>
+            에이전트는 누른 시점까지의 경보·지표·로그·배포만 보고 원인과 조치를 제안합니다. 조치는 사람이 승인해야 실행됩니다
+          </EmptyState>
+        )
       ) : !view ? (
         <EmptyState title={STREAM_TITLE[status]}>{status === 'notFound' || status === 'failed' ? '다시 조사를 누르면 새로 시작합니다' : undefined}</EmptyState>
       ) : (

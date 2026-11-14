@@ -85,28 +85,17 @@ test('조사 시작 기록의 atSec 을 보여 준다 (없으면 전체 기록)'
   assert.deepEqual([at.atSec, summarizeInvestigation(base).atSec], [120, undefined]);
 });
 
-test('조사 버튼: 승인 대기 제안, 경보 전, 녹화 정보 읽는 중, 녹화 없음, 녹화 시점 전에는 끄고 이유를 준다', () => {
-  const at = (alerted: boolean, nowSec: number, readyAt: number | null | undefined, pendingProposal = false) => startBlockedReason({ alerted, nowSec, readyAt, pendingProposal });
+test('조사 버튼(서버): 승인 대기 제안이 있거나 경보 전이면 끄고 이유를 준다', () => {
+  const at = (alerted: boolean, pendingProposal: boolean) => startBlockedReason({ demo: false, alerted, pendingProposal });
   assert.deepEqual(
-    [
-      at(true, 200, 0, true),
-      at(false, 200, 0, true), // 처음으로 돌아가 경보가 없어도 대기 제안이 먼저
-      at(false, 200, 0),
-      at(true, 200, undefined),
-      at(true, 200, null),
-      at(true, 119, 120),
-      at(true, 120, 120),
-      at(true, 5, 0), // 서버 모드: 경보만 울리면 언제든
-    ],
-    [
-      '승인 대기 중인 제안을 먼저 승인하거나 거절하세요',
-      '승인 대기 중인 제안을 먼저 승인하거나 거절하세요',
-      '경보가 울리면 조사할 수 있습니다',
-      '데모 녹화 정보를 불러오는 중입니다',
-      '이 시나리오는 데모 녹화를 찾지 못했습니다',
-      'T+02:00부터 누를 수 있습니다',
-      undefined,
-      undefined,
-    ],
+    [at(true, true), at(false, true), at(false, false), at(true, false)],
+    ['승인 대기 중인 제안을 먼저 승인하거나 거절하세요', '승인 대기 중인 제안을 먼저 승인하거나 거절하세요', '경보가 울리면 조사할 수 있습니다', undefined],
+  );
+});
+
+test('조사 버튼(데모): 녹화가 있으면 경보 전에도 누를 수 있다 (재생을 녹화 시점으로 옮기므로)', () => {
+  assert.deepEqual(
+    [undefined, null, 120].map((readyAt) => startBlockedReason({ demo: true, readyAt })),
+    ['데모 녹화 정보를 불러오는 중입니다', '이 시나리오는 데모 녹화를 찾지 못했습니다', undefined],
   );
 });

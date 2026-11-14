@@ -53,16 +53,30 @@ export function playbackGaps(events: readonly AuditEvent[]): number[] {
   });
 }
 
-/** 멈춘 동안은 흐르지 않는 시계. 돌려준 함수는 지금까지 흐른 초를 준다 */
-export function pausableClock(now: () => number, isPaused: () => boolean): () => number {
+/** 멈춘 동안은 흐르지 않는 시계. read 는 지금까지 흐른 초, jump 는 흐른 초를 그 값으로 옮긴다 */
+export function pausableClock(now: () => number, isPaused: () => boolean): { read: () => number; jump: (sec: number) => void } {
   let ran = 0;
   let last = now();
-  return () => {
-    const t = now();
-    if (!isPaused()) ran += (t - last) / 1000;
-    last = t;
-    return ran;
+  return {
+    read: () => {
+      const t = now();
+      if (!isPaused()) ran += (t - last) / 1000;
+      last = t;
+      return ran;
+    },
+    jump: (sec) => {
+      ran = sec;
+      last = now();
+    },
   };
+}
+
+// 재생 위치 옮기기 요청. 재생 중인 /events 가 다음 틱에 가져가 처리한다 (한 번에 하나의 재생만 돈다)
+let seekTo: number | undefined;
+
+/** 데모 재생 위치를 sec(시나리오 경과 초)로 옮긴다. 그 시점까지의 이벤트를 snapshot 한 건으로 보내므로 멈춰 있어도 화면이 그 위치로 바뀐다 */
+export function demoSeek(sec: number): void {
+  seekTo = sec;
 }
 
 // 조사별 브라우저 안 결정 기록과 구독자. 새로고침하면 사라진다
@@ -112,7 +126,15 @@ export async function demoSubscribe(url: string, opts: SubscribeOptions, isPause
   let cycle = 0;
   let next = 0;
   while (!signal.aborted) {
-    const elapsed = clock() * speed;
+    if (seekTo !== undefined) {
+      const target = Math.max(0, Math.min(seekTo, demo.durationSec - 1)); // 끝까지 옮기면 다음 바퀴로 넘어가므로 1초 앞에서 멈춘다
+      seekTo = undefined;
+      clock.jump((cycle * demo.durationSec + target) / speed); // 바퀴 번호는 그대로 둔다
+      next = demo.events.findIndex((e) => e.simSec > target);
+      if (next === -1) next = demo.events.length;
+      onMessage({ event: 'snapshot', data: JSON.stringify(demo.events.slice(0, next).map((e) => e.event)) });
+    }
+    const elapsed = clock.read() * speed;
     const c = Math.floor(elapsed / demo.durationSec);
     if (c !== cycle) {
       for (; next < demo.events.length; next++) send(next);

@@ -65,6 +65,29 @@ export function useSignalStream(url: string, paused = false) {
         else if (!ac.signal.aborted) setStatus('closed');
       },
       onMessage: (msg) => {
+        if (msg.event === 'snapshot') {
+          // 데모가 재생 위치를 옮겼다 (demoSeek). 그 시점까지의 이벤트로 화면을 바꾼다.
+          // 옮긴 위치를 보려고 누른 것이라 멈춰 있어도 바로 반영하고, 그 전에 쌓인 버퍼는 버린다
+          let list: unknown;
+          try {
+            list = JSON.parse(msg.data!);
+          } catch {
+            setRejected((n) => n + 1);
+            return;
+          }
+          const ok: SignalEvent[] = [];
+          let bad = 0;
+          for (const raw of Array.isArray(list) ? list : []) {
+            const r = parseEvent(raw);
+            if (r.ok) ok.push(r.event);
+            else bad++;
+          }
+          heldRef.current = EMPTY_HELD;
+          setPending(0);
+          setEvents(ok);
+          if (bad > 0) setRejected((n) => n + bad);
+          return;
+        }
         if (msg.event === 'reset') {
           // 시나리오가 처음부터 다시 시작
           if (pausedRef.current) hold({ reset: true });
