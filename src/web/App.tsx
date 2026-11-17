@@ -200,6 +200,7 @@ export function App() {
           </span>
         </div>
       </header>
+      <p className="narrow-note">넓은 화면(1200px 이상)에서 차트와 조사 결과를 나란히 보도록 만든 화면입니다</p>
 
       <main className="layout">
         <Card
@@ -473,12 +474,13 @@ function Progress({ now, total }: { now: number; total: number }) {
 function Sparkline({ points, color, total }: { points: readonly Point[]; color?: string; total: number }) {
   const W = 72;
   const H = 18;
-  if (points.length < 2) return <svg width={W} height={H} aria-hidden="true" />;
+  // 좌표는 W×H 기준으로 그리고 화면 폭은 칸을 따라 줄어든다(.spark). 늘리고 줄여도 선 굵기는 그대로 둔다
+  if (points.length < 2) return <svg viewBox={`0 0 ${W} ${H}`} aria-hidden="true" className="spark" />;
   const max = Math.max(...points.map((p) => p.v), 1);
   const d = points.map((p, i) => `${i ? 'L' : 'M'}${((p.t / total) * W).toFixed(1)},${(H - 1 - (p.v / max) * (H - 2)).toFixed(1)}`).join('');
   return (
-    <svg width={W} height={H} aria-hidden="true" className="spark">
-      <path d={d} fill="none" stroke={color} strokeWidth={1.25} strokeLinejoin="round" />
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true" className="spark">
+      <path d={d} fill="none" stroke={color} strokeWidth={1.25} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

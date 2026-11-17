@@ -31,12 +31,15 @@ code {
   font-family: var(--font-mono);
 }
 
-/* ── 전체 틀: 위 헤더 / 아래 3영역. 화면 높이를 넘지 않고 각 영역이 안에서 스크롤한다 ── */
+/* ── 전체 틀: 위 헤더 / 아래 3영역. 화면 높이를 넘지 않고 각 영역이 안에서 스크롤한다 ──
+   1200px 미만은 페이지 전체가 스크롤하게 바꾸고 영역을 아래로 쌓는다 (파일 끝 "좁은 화면") */
 .app {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   height: 100vh;
-  min-width: 1200px;
+}
+.narrow-note {
+  display: none;
 }
 
 .topbar {
@@ -120,7 +123,7 @@ code {
 .layout {
   display: grid;
   /* 오른쪽 열은 조사 패널. 장애 화면을 보면서 옆에서 조사 과정을 따라간다 */
-  grid-template-columns: minmax(340px, 28%) minmax(0, 1fr) minmax(360px, 30%);
+  grid-template-columns: minmax(370px, 28%) minmax(0, 1fr) minmax(360px, 30%); /* 왼쪽 370px: 서비스 상태 표 5열이 들어가는 폭 */
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
     'timeline timeline inv'
@@ -275,6 +278,7 @@ code {
 /* ── 표 ── */
 .services-body {
   padding: var(--space-1) 0 var(--space-2);
+  overflow-x: auto; /* 열이 카드보다 넓어지면 잘리지 않고 카드 안에서 가로로 스크롤한다 */
 }
 .table {
   width: 100%;
@@ -333,6 +337,10 @@ code {
 }
 .spark {
   display: block;
+  width: 100%;
+  min-width: 40px;
+  max-width: 72px;
+  height: 18px;
 }
 
 /* ── 이벤트 ── */
@@ -471,5 +479,59 @@ code {
   .spinner,
   .chart-skeleton {
     animation: none;
+  }
+}
+
+/* ── 좁은 화면 ──
+   넓은 화면은 차트와 조사 결과를 나란히 보는 3단이다. 좁으면 아무것도 가리지 않도록 아래로 쌓는다.
+   조사 칸을 떠 있는 창이나 서랍으로 띄우지 않는 이유: 근거를 차트·이벤트와 대조하고 승인해야 하는데, 겹쳐 띄우면 대조할 대상을 가린다.
+   이벤트 목록은 가상화 때문에 스크롤 상자 높이가 정해져 있어야 해서 그 줄에 고정 높이를 준다 */
+@media (max-width: 1199px) {
+  .app {
+    height: auto;
+    min-height: 100vh;
+  }
+  .topbar {
+    height: auto;
+    min-height: 52px;
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+  }
+  .layout {
+    grid-template-columns: minmax(370px, 40%) minmax(0, 1fr);
+    grid-template-rows: auto 560px auto;
+    grid-template-areas:
+      'timeline timeline'
+      'side feed'
+      'inv inv';
+  }
+}
+@media (max-width: 767px) {
+  /* 컨트롤 묶음도 줄바꿈한다. 묶음 왼쪽 구분선은 줄이 바뀌면 의미가 없어 뺀다 */
+  .topbar-controls {
+    flex-wrap: wrap;
+    height: auto;
+    row-gap: var(--space-2);
+    padding-left: 0;
+    border-left: 0;
+  }
+  .narrow-note {
+    display: block;
+    margin: 0;
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    background: var(--color-surface-muted);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 480px auto;
+    grid-template-areas:
+      'timeline'
+      'side'
+      'feed'
+      'inv';
   }
 }
