@@ -165,8 +165,8 @@ export async function demoReadyAt(scenario: string): Promise<number | undefined>
 /** 이 시나리오의 녹화 id. 녹화는 정해진 시점(atSec)까지의 기록으로 돌린 조사라, 재생이 그 시점 전이면 아직 쓸 수 없다 */
 export async function demoStart(scenario: string, nowSec: number): Promise<string> {
   const rec = await recording(scenario);
-  if (!rec) throw new DemoError(404, `${scenario} 는 데모 녹화가 없습니다`);
-  if (nowSec < rec.atSec) throw new DemoError(409, `데모 녹화는 ${formatElapsed(rec.atSec)} 시점까지의 기록으로 돌린 조사입니다. 재생이 그 시점을 지나면 다시 눌러 주세요`);
+  if (!rec) throw new DemoError(404, `${scenario} 시나리오는 데모 녹화가 없습니다`);
+  if (nowSec < rec.atSec) throw new DemoError(409, `데모 녹화는 ${formatElapsed(rec.atSec)} 시점까지의 기록으로 돌린 조사라 그 전 시점에서는 열지 않습니다`);
   return rec.id;
 }
 

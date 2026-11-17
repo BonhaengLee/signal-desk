@@ -136,3 +136,14 @@ export function startBlockedReason(
   if (!o.alerted) return '경보가 울리면 조사할 수 있습니다';
   return undefined;
 }
+
+/** 조사 버튼 문구. recordedAt: 데모 녹화 시점(T+02:00 꼴). hasInvestigation: 서버 모드에서 이미 연 조사가 있는가 */
+export function startLabel(o: { demo: true; recordedAt: string } | { demo: false; hasInvestigation: boolean }): string {
+  if (o.demo) return `${o.recordedAt} 조사 녹화 보기`.trim();
+  return o.hasInvestigation ? '다시 조사' : '지금 시점까지 조사';
+}
+
+/** 조사 기록을 못 불러왔을 때 할 일. 화면에 있는 버튼 이름 그대로 안내한다 (데모 버튼은 다시 조사가 아니다) */
+export function streamFailHint(demo: boolean, label: string): string {
+  return demo ? `「${label}」를 누르면 녹화를 다시 엽니다` : `「${label}」를 누르면 새로 시작합니다`;
+}

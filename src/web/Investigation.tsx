@@ -4,7 +4,7 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { Action } from '../audit/store.ts';
 import type { Verdict } from '../agent/tools.ts';
-import { formatCall, formatResult, previewResult, startBlockedReason, type InvestigationView } from './investigation.ts';
+import { formatCall, formatResult, previewResult, startBlockedReason, startLabel, streamFailHint, type InvestigationView } from './investigation.ts';
 import { formatElapsed } from './derive.ts';
 import { ApiError, decideProposal, startInvestigation, useInvestigation, useReadyAt, type InvestigationStreamStatus } from './useInvestigation.ts';
 import { DEMO, demoSeek } from './demo.ts';
@@ -82,6 +82,7 @@ export function InvestigationPanel({
   const readyAt = useReadyAt(scenario);
   const blocked = startBlockedReason(DEMO ? { demo: true, readyAt } : { demo: false, alerted, pendingProposal: view?.proposal?.status === 'pending' });
   const recordedAt = typeof readyAt === 'number' ? formatElapsed(readyAt) : '';
+  const label = startLabel(DEMO ? { demo: true, recordedAt } : { demo: false, hasInvestigation: id !== undefined });
   const blockedId = useId();
 
   useEffect(() => writeInv(id), [id]);
@@ -134,7 +135,7 @@ export function InvestigationPanel({
               : `${formatElapsed(Math.floor(nowSec))} 까지의 기록으로 조사합니다. 화면 재생도 이 시점에서 멈춥니다`)
           }
         >
-          {starting ? '시작하는 중…' : DEMO ? `${recordedAt} 조사 녹화 보기` : id ? '다시 조사' : '지금 시점까지 조사'}
+          {starting ? '시작하는 중…' : label}
         </Button>
       }
       className={`${s.card} area-inv`}
@@ -163,7 +164,7 @@ export function InvestigationPanel({
           </EmptyState>
         )
       ) : !view ? (
-        <EmptyState title={STREAM_TITLE[status]}>{status === 'notFound' || status === 'failed' ? '다시 조사를 누르면 새로 시작합니다' : undefined}</EmptyState>
+        <EmptyState title={STREAM_TITLE[status]}>{status === 'notFound' || status === 'failed' ? streamFailHint(DEMO, label) : undefined}</EmptyState>
       ) : (
         <InvestigationBody view={view} />
       )}

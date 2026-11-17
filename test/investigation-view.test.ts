@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AuditEvent } from '../src/audit/store.ts';
-import { formatCall, formatResult, parseAuditEvent, previewResult, startBlockedReason, summarizeInvestigation } from '../src/web/investigation.ts';
+import { formatCall, formatResult, parseAuditEvent, previewResult, startBlockedReason, startLabel, streamFailHint, summarizeInvestigation } from '../src/web/investigation.ts';
 
 const ev = (seq: number, kind: AuditEvent['kind'], payload: unknown, actor: AuditEvent['actor'] = 'agent'): AuditEvent => ({
   seq,
@@ -98,4 +98,16 @@ test('조사 버튼(데모): 녹화가 있으면 경보 전에도 누를 수 있
     [undefined, null, 120].map((readyAt) => startBlockedReason({ demo: true, readyAt })),
     ['데모 녹화 정보를 불러오는 중입니다', '이 시나리오는 데모 녹화를 찾지 못했습니다', undefined],
   );
+});
+
+test('조사 기록을 못 불러왔을 때 안내는 화면에 있는 버튼 이름을 가리킨다 (데모 버튼은 다시 조사가 아니다)', () => {
+  const cases = [
+    [true, startLabel({ demo: true, recordedAt: 'T+02:00' })],
+    [false, startLabel({ demo: false, hasInvestigation: true })],
+  ] as const;
+  assert.deepEqual(
+    cases.map(([demo, label]) => streamFailHint(demo, label)),
+    ['「T+02:00 조사 녹화 보기」를 누르면 녹화를 다시 엽니다', '「다시 조사」를 누르면 새로 시작합니다'],
+  );
+  assert.deepEqual([startLabel({ demo: false, hasInvestigation: false }), startLabel({ demo: true, recordedAt: '' })], ['지금 시점까지 조사', '조사 녹화 보기']);
 });

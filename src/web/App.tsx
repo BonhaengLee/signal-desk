@@ -46,11 +46,11 @@ const SPEEDS = [
 type Speed = (typeof SPEEDS)[number]['id'];
 
 const STATUS: Record<StreamStatus, { label: string; tone: Tone; pulse: boolean; help: string }> = {
-  connecting: { label: '연결 중', tone: 'neutral', pulse: true, help: 'SSE 서버에 연결하고 있습니다' },
+  connecting: { label: '연결 중', tone: 'neutral', pulse: true, help: DEMO ? '데모 이벤트 파일을 불러오고 있습니다' : 'SSE 서버에 연결하고 있습니다' },
   reconnecting: { label: '재연결 중', tone: 'warn', pulse: true, help: '서버에 연결하지 못해 다시 시도하고 있습니다' },
   open: { label: DEMO ? '재생 중' : '실시간', tone: 'ok', pulse: true, help: DEMO ? '미리 만든 이벤트를 배속에 맞춰 재생하는 중입니다' : 'SSE 로 이벤트를 받는 중입니다' },
   closed: { label: '연결 종료', tone: 'neutral', pulse: false, help: '서버가 스트림을 닫았습니다' },
-  error: { label: '연결 실패', tone: 'error', pulse: false, help: 'SSE 서버에 연결하지 못했습니다' },
+  error: { label: '연결 실패', tone: 'error', pulse: false, help: DEMO ? '데모 이벤트 파일을 불러오지 못했습니다' : 'SSE 서버에 연결하지 못했습니다' },
 };
 // 연결이 정상일 때만 이 표시로 덮는다. 끊김·실패는 멈춰 있어도 그대로 보여야 한다
 const PAUSED: (typeof STATUS)[StreamStatus] = {
@@ -62,7 +62,7 @@ const PAUSED: (typeof STATUS)[StreamStatus] = {
 
 /** 연결이 안 될 때 차트 자리와 이벤트 목록이 같이 보여 줄 문구. 연결 중이거나 정상이면 undefined */
 function connectionProblem(status: StreamStatus, attempt: number): { title: string; hint: string } | undefined {
-  const fix = DEMO ? '데모 파일을 불러오지 못했습니다. 새로고침해 보세요' : 'SSE 서버가 떠 있는지 확인하세요 (npm run dev:server)';
+  const fix = DEMO ? '새로고침해 보세요' : 'SSE 서버가 떠 있는지 확인하세요 (npm run dev:server)';
   if (status === 'error') return { title: DEMO ? '데모를 불러오지 못했습니다' : '서버에 연결하지 못했습니다', hint: fix };
   if (status === 'reconnecting') return { title: '서버에 연결하지 못했습니다', hint: `${attempt}번째 다시 시도하는 중입니다. ${fix}` };
   return undefined;

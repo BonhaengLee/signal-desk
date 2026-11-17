@@ -42,7 +42,7 @@ test('데모 녹화는 녹화 시점 전에 누르면 시작하지 않는다', a
     const early = await demoStart('db-degradation', 90).catch((e: { status: number; message: string }) => `${e.status} ${e.message}`);
     assert.deepEqual(
       [early, await demoStart('db-degradation', 120), await demoStart('retry-storm', 150).catch((e: { status: number }) => e.status)],
-      ['409 데모 녹화는 T+02:00 시점까지의 기록으로 돌린 조사입니다. 재생이 그 시점을 지나면 다시 눌러 주세요', 'rec-1', 404],
+      ['409 데모 녹화는 T+02:00 시점까지의 기록으로 돌린 조사라 그 전 시점에서는 열지 않습니다', 'rec-1', 404],
     );
   } finally {
     globalThis.fetch = real;
